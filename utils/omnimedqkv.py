@@ -16,9 +16,12 @@ class OmniMedVQA_Dataset(Dataset):
                  use_doctor_prompt: bool = True,
                  access='open',                    # 'open' or 'both'
                  split_files=None,
-                 visdep_sidecar: str = None,       # 可选：JSONL(推荐)/JSON，按 image_path → visdep_score
+                 visdep_sidecar: str = None,       # 可选：JSONL(推荐)/JSON，按 question_id → visdep_score
                  visdep_min_score: float = None,   # 可选：过滤阈值（如 0.7 只留高依赖）
-                 visdep_weighting: bool = False    # 可选：输出 visdep_weight = 0.5+0.5*score
+                 visdep_weighting: bool = False,    # 可选：输出 visdep_weight = 0.5+0.5*score
+                 dep_sidecar: str = None,          # JSONL/JSON：按 question_id → dep
+                 dep_min: float = 0.0,            # 过滤阈值（例如 0.0 表示丢弃 dep<0）
+                 keep_if_dep_missing: bool = True  # sidecar 里找不到 dep 时是否保留
                  ):
         self.root_dir = root_dir
         self.tokenizer = tokenizer
@@ -32,11 +35,19 @@ class OmniMedVQA_Dataset(Dataset):
         self.access = access
         self.split_files = split_files
 
+        self._dep_map = self._load_dep_sidecar(dep_sidecar) if dep_sidecar else {}
+        self.dep_min = dep_min
+        self.keep_if_dep_missing = keep_if_dep_missing
+
         self.use_doctor_prompt = use_doctor_prompt
         self.doctor_prompt = (
-            "You are a medical AI assistant. Read the image and the question carefully. "
-            "Then answer strictly by selecting one of the given options. "
-            "Do not generate anything outside the provided options."
+            "You are a medical doctor analyzing clinical images. "
+            "Answer concisely and precisely, focusing only on the image findings relevant to the question. "
+            "Always include the exact final answer text provided in the dataset "
+            "(not letters or numbers, but the actual answer words). "
+            "Write 1–3 short sentences in total: one sentence may mention the key visual detail, "
+            "and one sentence must contain the final answer. "
+            "Do not add any extra commentary, headings, or labels."
         )
 
         self._visdep_map = self._load_visdep_sidecar(visdep_sidecar) if visdep_sidecar else {}
@@ -62,6 +73,25 @@ class OmniMedVQA_Dataset(Dataset):
 
         print(f"[OmniMedVQA_Dataset] 成功加载样本数: {len(self.samples)}")
 
+        # === dep 阈值过滤 ===
+        if self.dep_min is not None:
+            before = len(self.samples)
+            kept, dropped = [], 0
+            for s in self.samples:
+                dep = s.get('dep', None)
+                if dep is None:
+                    if self.keep_if_dep_missing:
+                        kept.append(s)
+                    else:
+                        dropped += 1
+                else:
+                    if float(dep) >= float(self.dep_min):
+                        kept.append(s)
+                    else:
+                        dropped += 1
+            self.samples = kept
+            print(f"[OmniMedVQA_Dataset] dep 过滤: {before} → {len(self.samples)} (阈值≥{self.dep_min}，丢弃 {dropped} 条)")
+
     def _load_visdep_sidecar(self, path):
         if not os.path.exists(path):
             print(f"[OmniMedVQA_Dataset] visdep_sidecar 文件不存在: {path}")
@@ -73,7 +103,7 @@ class OmniMedVQA_Dataset(Dataset):
                     if not line.strip(): continue
                     try:
                         obj = json.loads(line)
-                        ip = obj.get("image_path")
+                        ip = obj.get("question_id")
                         sc = obj.get("visdep_score")
                         if ip is not None and isinstance(sc, (int, float)):
                             m[os.path.abspath(ip)] = float(max(0.0, min(1.0, sc)))
@@ -85,7 +115,7 @@ class OmniMedVQA_Dataset(Dataset):
                 # 支持两种格式：list[{"image_path":..., "visdep_score":...}] 或 dict[image_path]=score
                 if isinstance(data, list):
                     for obj in data:
-                        ip = obj.get("image_path")
+                        ip = obj.get("question_id")
                         sc = obj.get("visdep_score")
                         if ip is not None and isinstance(sc, (int, float)):
                             m[os.path.abspath(ip)] = float(max(0.0, min(1.0, sc)))
@@ -96,6 +126,54 @@ class OmniMedVQA_Dataset(Dataset):
             except Exception as e:
                 print(f"[OmniMedVQA_Dataset] 解析 sidecar 失败: {path} | {e}")
         print(f"[OmniMedVQA_Dataset] 载入 visdep_sidecar 条目数: {len(m)}")
+        return m
+
+    def _load_dep_sidecar(self, path: str):
+        if not os.path.exists(path):
+            print(f"[OmniMedVQA_Dataset] dep_sidecar 文件不存在: {path}")
+            return {}
+        m = {}
+        def _clip(x): return float(max(-1.0, min(1.0, float(x))))
+
+        try:
+            if path.endswith(".jsonl"):
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line: 
+                            continue
+                        obj = json.loads(line)
+                        qid = obj.get("question_id")
+                        dep = obj.get("dep", obj.get("dep_score", None))
+                        if dep is None:
+                            # 兼容 vec_g / vec-cf 自动计算
+                            vg = obj.get("vec_g", None)
+                            vcf = obj.get("vec-cf", obj.get("vec_cf", None))
+                            if vg is not None and vcf is not None:
+                                dep = float(vg) - float(vcf)
+                        if qid is not None and isinstance(dep, (int, float)):
+                            m[str(qid)] = _clip(dep)
+            else:
+                data = json.load(open(path, "r", encoding="utf-8"))
+                if isinstance(data, list):
+                    for obj in data:
+                        qid = obj.get("question_id")
+                        dep = obj.get("dep", obj.get("dep_score", None))
+                        if dep is None:
+                            vg = obj.get("vec_g", None)
+                            vcf = obj.get("vec-cf", obj.get("vec_cf", None))
+                            if vg is not None and vcf is not None:
+                                dep = float(vg) - float(vcf)
+                        if qid is not None and isinstance(dep, (int, float)):
+                            m[str(qid)] = _clip(dep)
+                elif isinstance(data, dict):
+                    # 若是 {question_id: dep}
+                    for qid, dep in data.items():
+                        if isinstance(dep, (int, float)):
+                            m[str(qid)] = _clip(dep)
+            print(f"[OmniMedVQA_Dataset] 载入 dep_sidecar 条目数: {len(m)}")
+        except Exception as e:
+            print(f"[OmniMedVQA_Dataset] 解析 dep_sidecar 失败: {path} | {e}")
         return m
 
     def _load_samples(self):
@@ -133,7 +211,7 @@ class OmniMedVQA_Dataset(Dataset):
                     # === 读取 visdep_score：优先题目 JSON，其次 sidecar，默认为 0.5 中性 ===
                     vscore = item.get('visdep_score', None)
                     if not isinstance(vscore, (int, float)):
-                        vscore = self._visdep_map.get(img_abs, 0.5)
+                        vscore = self._visdep_map.get(item.get('question_id'), 0.5)
                     vscore = float(max(0.0, min(1.0, vscore)))
 
                     samples.append({
@@ -145,6 +223,8 @@ class OmniMedVQA_Dataset(Dataset):
                         'modality_type': item.get('modality_type'),
                         'dataset_name': item.get('dataset'),
                         'visdep_score': vscore,
+                        'question_id': item.get('question_id'),
+                        'dep': self._dep_map.get(str(item.get('question_id')), None),
                     })
         return samples
 

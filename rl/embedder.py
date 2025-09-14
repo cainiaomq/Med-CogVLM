@@ -9,7 +9,6 @@ from rl.roi import to_pil_list
 
 import open_clip
 from open_clip.factory import HF_HUB_PREFIX, _MODEL_CONFIGS
-from transformers import AutoTokenizer
 
 _MED_CLIP_DIR = "/home/lvzeyu/.cache/huggingface/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
 _CFG_JSON = os.path.join(_MED_CLIP_DIR, "open_clip_config.json")

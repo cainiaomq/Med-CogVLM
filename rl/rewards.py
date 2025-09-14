@@ -1,10 +1,8 @@
 # finetune_demo/rl/rewards.py
 # -*- coding: utf-8 -*-
 from typing import List, Optional, Tuple, Dict
-import os
 import re
 from datetime import datetime
-import string
 import torch
 import torch.nn.functional as F
 from rl.roi import get_local_crops, make_counterfactuals

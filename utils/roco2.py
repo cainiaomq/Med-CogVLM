@@ -2,7 +2,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from PIL import Image
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset
 
 
 class ROCOv2_Dataset(Dataset):
