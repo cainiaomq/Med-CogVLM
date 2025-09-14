@@ -30,7 +30,7 @@ def _cos(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 def iter_items(dataset_path: str, access: str, split_files: Optional[List[str]]):
     qa_base = os.path.join(dataset_path, "QA_information")   # 基路径：QA 信息目录
     dirs = []
-    if access == "open":                           # open 或 both：包含 Open-access
+    if access == "open":                                     # open 或 both：包含 Open-access
         dirs.append(os.path.join(qa_base, "Open-access"))
     if access == "both":                                     # both：再包含 Restricted-access
         dirs.append(os.path.join(qa_base, "Restricted-access"))
@@ -87,13 +87,12 @@ def main():
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out_jsonl)) or ".", exist_ok=True)
 
-    # 将逗号分隔的 split_files 字符串解析为列表（若未提供则为 None）
     split_list = None
     if args.split_files:
         split_list = [x.strip() for x in args.split_files.split(",") if x.strip()]
 
     items_all = list(iter_items(args.dataset_path, args.access, split_list))
-    done_set = load_done_set(args.out_jsonl)                 # ← 读取已完成集合（question_id）
+    done_set = load_done_set(args.out_jsonl)
     items = [it for it in items_all if it.get("question_id") not in done_set]
 
     print(f"[Info] Collected {len(items_all)} items; resume skips {len(done_set)} done; pending {len(items)}.")
@@ -127,14 +126,10 @@ def main():
                     pbar.update(1)
                     continue
 
-                # === 仅在 main 里把路径转成 PIL，避免触发 _to_pil 对 str 的报错 ===
                 pil_img = Image.open(img_abs).convert("RGB")
-
-                # 反事实图像：可能返回 单张/多张；可能是 path 或 PIL 或 list
                 cf_raw = make_counterfactuals(pil_img, blur_sigma=3.0, shuffle_grid=4)
 
                 def ensure_pil_list(x):
-                    # 统一成 List[PIL.Image.Image]，不修改 _to_pil 的实现
                     if isinstance(x, Image.Image):
                         return [x]
                     if isinstance(x, str):
@@ -147,17 +142,12 @@ def main():
                             elif isinstance(xi, str):
                                 out.append(Image.open(xi).convert("RGB"))
                             else:
-                                # 已经是 tensor/ndarray 的话，交给 embedder 现有逻辑处理
                                 out.append(xi)
                         return out
-                    # 其他（如 ndarray/tensor）直接包一层 list，交给 embedder 的预处理
                     return [x]
 
                 cf_imgs = ensure_pil_list(cf_raw)
-
-                # n_runs 表示重复次数，可以设成 3 或 5
                 n_runs = 3  
-
                 sims, sims_cf, diffs = [], [], []
 
                 with torch.no_grad():
@@ -174,7 +164,6 @@ def main():
                         sims_cf.append(sim_cf)
                         diffs.append(diff)
 
-                    # 堆叠后求均值
                     sim = torch.stack(sims).mean(0)
                     sim_cf = torch.stack(sims_cf).mean(0)
                     diff = torch.stack(diffs).mean(0)
