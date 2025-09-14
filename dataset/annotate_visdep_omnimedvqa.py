@@ -9,7 +9,7 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 from concurrent.futures import ThreadPoolExecutor
 from openai import OpenAI
 
-client = OpenAI(api_key="sk-UZnJY3eo8oBPQ07V7880FdC62524497fBa22F08fD6923a47",base_url="https://api.apiyi.com/v1")  # 建议改为从环境变量读取，避免泄漏
+client = OpenAI()  # 建议改为从环境变量读取，避免泄漏
 
 SYSTEM_PROMPT = """You are a medical data annotator. Your task is to judge how visually-dependent a multiple-choice medical VQA question is, given only the text (no images).
 "Visually-dependent" means the question cannot be reliably answered without looking at the image (e.g., requires spatial localization, radiologic signs/patterns, intensity/signal characteristics, comparing views/timepoints/sides, or interpreting markers/arrows).
