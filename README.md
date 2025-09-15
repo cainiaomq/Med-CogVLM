@@ -45,8 +45,8 @@ We provide both SFT and GRPO training scripts:
 # SFT
 deepspeed ./peft_lora.py --ds_config ./ds_config.yaml
 
-# GRPO (dual-LoRA, ZeRO-2)
-deepspeed f./peft_grpo_duallora.py
+# GRPO (LoRA, ZeRO-2)
+deepspeed f./lora_grpo.py
 ```
 
 During training, Loss values will be recorded in tensorboard for monitoring convergence:
@@ -57,3 +57,14 @@ tensorboard --logdir=output
 ```
 
 **We recommend BF16 precision** to avoid NaN losses.
+
+3. Inference on the fine-tuned model
+
+By running `peft_infer.py` you can use the fine-tuned model to generate text. You need to configure the fine-tuned model
+address according to the configuration requirements in the code. Then run:
+
+```shell
+python peft_infer.py
+```
+
+You can use the fine-tuned model for inference.

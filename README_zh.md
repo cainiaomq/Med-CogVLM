@@ -45,8 +45,8 @@ pip install -r requirements.txt
 # SFT
 deepspeed ./peft_lora.py --ds_config ./ds_config.yaml
 
-# GRPO (dual-LoRA, ZeRO-2)
-deepspeed f./peft_grpo_duallora.py
+# GRPO (LoRA, ZeRO-2)
+deepspeed f./lora_grpo.py
 ```
 
 SFT在训练过程中，Loss 会自动写入 tensorboard，便于监控收敛情况：
@@ -57,3 +57,13 @@ tensorboard --logdir=output
 ```
 
 **推荐使用 BF16 精度**，避免出现 Loss 为 NaN 的情况。
+
+3. 推理微调后的模型
+
+运行 `peft_infer.py`，你可以使用微调后的模型生成文本。您需要按照代码中的配置要求，配置微调后的模型地址。然后运行:
+
+```shell
+python peft_infer.py
+```
+
+即可使用微调的模型进行推理。
