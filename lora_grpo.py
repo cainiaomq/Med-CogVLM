@@ -57,13 +57,13 @@ def parse_args():
     p.add_argument("--save_step", type=int, default=100)
 
     # KL
-    p.add_argument("--kl_coef", type=float, default=0.02)
+    p.add_argument("--kl_coef", type=float, default=0.01)
 
     # 奖励权重
-    p.add_argument("--w_acc", type=float, default=0.30)      #早期（acc < 35%）—偏探索/看图 w_acc=0.30, w_vec_g=0.35, w_vec_l=0.25, w_dep=0.10
-    p.add_argument("--w_vec_g", type=float, default=0.35)   #中期（35% ≤ acc < 65%）—稳步收敛 w_acc=0.45, w_vec_g=0.25, w_vec_l=0.20, w_dep=0.10
-    p.add_argument("--w_vec_l", type=float, default=0.25)   #后期（acc ≥ 65%）—强化真图依赖 w_acc=0.40, w_vec_g=0.25, w_vec_l=0.20, w_dep=0.15
-    p.add_argument("--w_dep", type=float, default=0.10)
+    p.add_argument("--w_acc", type=float, default=0.60)
+    p.add_argument("--w_vec_g", type=float, default=0.16)
+    p.add_argument("--w_vec_l", type=float, default=0.16)
+    p.add_argument("--w_dep", type=float, default=0.08)
     p.add_argument("--dep_blur_sigma", type=float, default=3.0)
     p.add_argument("--dep_shuffle_grid", type=int, default=4)
     p.add_argument("--n_rois", type=int, default=9)  # 默认九裁剪

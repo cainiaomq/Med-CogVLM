@@ -3,6 +3,7 @@
 from typing import List, Optional, Tuple, Dict
 import re
 from datetime import datetime
+import string
 import torch
 import torch.nn.functional as F
 from rl.roi import get_local_crops, make_counterfactuals
@@ -42,16 +43,18 @@ def _encode_txt(embedder, texts: List[str]) -> torch.Tensor:
 # 文本解析与格式工具
 # =========================
 _ANS_TAG_RE = re.compile(r"<\s*answer\s*>\s*(.*?)\s*<\s*/\s*answer\s*>", re.I | re.S)
-_LETTER_HEAD_RE = re.compile(r'^\s*([A-D1-4])[\)\].、．\s-]*', re.I)
+_LETTER_ANY_RE = re.compile(
+    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'
+    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'
+    r'\s*[\)\].、．：:]\s*',
+    re.I
+)
 
-# 一些常见同义归一（可按需补充）
-_SYNONYM_MAP = {
-    "x ray": "xray", "xray": "xray", "radiograph": "xray", "plain film": "xray",
-    "ct": "ct", "computed tomography": "ct",
-    "mri": "mri", "magnetic resonance imaging": "mri",
-    "yes": "yes", "true": "yes", "positive": "yes",
-    "no": "no", "false": "no", "negative": "no",
-}
+def _normalize_letter(x: str) -> str | None:
+    x = x.translate(str.maketrans("ＡＢＣＤａｂｃｄ１２３４", "ABCDabcd1234")).upper()
+    if x in {"A","B","C","D"}: return x
+    if x in {"1","2","3","4"}: return "ABCD"[int(x)-1]
+    return None
 
 def _extract_answer_tag(s: str) -> str | None:
     if not isinstance(s, str): return None
@@ -60,34 +63,14 @@ def _extract_answer_tag(s: str) -> str | None:
         return m.group(1).strip()
     return None
 
-def _extract_head_letter_and_tail(s: str) -> tuple[str | None, str]:
-    """返回 (选项字母 or None, 去掉字母头后的尾部文本)"""
+def _extract_head_letter_and_tail(s: str):
     if not isinstance(s, str): return None, ""
-    m = _LETTER_HEAD_RE.match(s)
+    m = _LETTER_ANY_RE.search(s)
     if m:
-        letter = m.group(1).upper()
-        tail = s[m.end():].strip()
-        return letter, tail
-    return None, s.strip()
-
-def _normalize_string(s: str) -> str:
-    if not isinstance(s, str): return ""
-    s = s.strip().lower()
-    s = _ANS_TAG_RE.sub(lambda m: m.group(1).strip().lower(), s)
-    s = re.sub(r"[^\w\s\-]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    toks = s.split()
-    toks = [_SYNONYM_MAP.get(t, t) for t in toks]
-    return " ".join(toks)
-
-def _normalize_loose(s: str) -> str:
-    """更宽松的归一：去标点小写空格压缩，适合做包含判断"""
-    if not isinstance(s, str): return ""
-    s = s.strip().lower()
-    s = re.sub(r"[^\w\s]", " ", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
+        letter = _normalize_letter(m.group(1))
+        if letter:
+            return letter
+    return None
 
 # =========================
 # 准确率奖励（示例逻辑：符号验证优先，其次字符串/标签匹配）
@@ -129,33 +112,12 @@ def accuracy_reward_bk(
 
             reward = 0.0
             try:
-                # 1) 选项字母匹配（优先）
-                pl, p_tail = _extract_head_letter_and_tail(content_core)
-                gl, g_tail = _extract_head_letter_and_tail(gold_core)
+                pl = _extract_head_letter_and_tail(content_core)
+                gl = _extract_head_letter_and_tail(gold_core)
                 if pl and gl and (pl == gl):
                     reward = 1.0
 
-                # 2) 文本匹配（规范化/宽松包含）
-                if reward == 0.0:
-                    p_norm = _normalize_string(p_tail if pl else content_core)
-                    g_norm = _normalize_string(g_tail if gl else gold_core)
-                    # 完全相等（规范化后）
-                    if p_norm and g_norm and (p_norm == g_norm):
-                        reward = 1.0
-                    else:
-                        # 宽松包含（缓解冗余描述）
-                        p_loose = _normalize_loose(p_tail if pl else content_core)
-                        g_loose = _normalize_loose(g_tail if gl else gold_core)
-                        if len(p_loose) >= 3 and len(g_loose) >= 3 and (g_loose in p_loose or p_loose in g_loose):
-                            reward = 1.0
-
-                # 3) 兜底：原始完整串规范化相等
-                if reward == 0.0:
-                    if _normalize_string(content_full) == _normalize_string(gold_full):
-                        reward = 1.0
-
             except Exception:
-                # 静默失败，按 0 计
                 pass
 
             vals.append(reward)

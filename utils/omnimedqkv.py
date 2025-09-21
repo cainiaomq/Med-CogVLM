@@ -41,14 +41,18 @@ class OmniMedVQA_Dataset(Dataset):
 
         self.use_doctor_prompt = use_doctor_prompt
         self.doctor_prompt = (
-            "You are a medical doctor analyzing clinical images. "
-            "Answer concisely and precisely, focusing only on the image findings relevant to the question. "
-            "Always include the exact final answer text provided in the dataset "
-            "(not letters or numbers, but the actual answer words). "
-            "Write 1–3 short sentences in total: one sentence may mention the key visual detail, "
-            "and one sentence must contain the final answer. "
-            "Do not add any extra commentary, headings, or labels."
+            "You are a medical doctor analyzing a clinical image. "
+            "Base your reasoning strictly on the visual evidence in the image, not on prior knowledge alone. "
+            "Answer concisely and precisely, focusing only on the findings visible in the image. "
+            "Select exactly one of the provided answer choices as the final diagnosis. "
+            "Your response must explicitly include this chosen answer. "
+            "Do NOT mention, compare, or describe any other answer choices. "
+            "Write 1–2 short sentences total: "
+            "one sentence should describe the key visual evidence, "
+            "and one sentence must state the final answer. "
+            "Ensure the reasoning and conclusion rely directly on the image and are consistent with the chosen answer."
         )
+
 
         self._visdep_map = self._load_visdep_sidecar(visdep_sidecar) if visdep_sidecar else {}
 
@@ -217,7 +221,7 @@ class OmniMedVQA_Dataset(Dataset):
                     samples.append({
                         'image_path': img_abs,
                         'question': item.get('question'),
-                        'options': [item.get(k) for k in ['option_A', 'option_B', 'option_C', 'option_D'] if item.get(k)],
+                        'options': [(k[-1], item.get(k)) for k in ['option_A', 'option_B', 'option_C', 'option_D'] if item.get(k)],
                         'gt_answer': item.get('gt_answer'),
                         'question_type': item.get('question_type'),
                         'modality_type': item.get('modality_type'),
@@ -248,9 +252,15 @@ class OmniMedVQA_Dataset(Dataset):
         image = Image.open(s['image_path']).convert("RGB")
         question = s['question']
         options = s.get('options', [])
-        gt = s.get('gt_answer', '')
+        raw_gt = s.get('gt_answer', '')
 
-        opt_text = '\n'.join(f"- {opt}" for _, opt in enumerate(options))
+        gt = raw_gt
+        for letter, opt in options:
+            if opt.strip().lower().rstrip(".") == raw_gt.strip().lower().rstrip("."):
+                gt = f"{letter}. {opt}"
+                break
+
+        opt_text = "\n".join(f"{letter}. {opt}" for letter, opt in options)
         prefix = (self.doctor_prompt + "\n") if self.use_doctor_prompt else ""
         query = prefix + f"{question}\nOptions:\n{opt_text}"
 
