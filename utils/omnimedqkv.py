@@ -40,19 +40,15 @@ class OmniMedVQA_Dataset(Dataset):
         self.keep_if_dep_missing = keep_if_dep_missing
 
         self.use_doctor_prompt = use_doctor_prompt
-        self.doctor_prompt = (
-            "You are a medical doctor analyzing a clinical image. "
-            "Base your reasoning strictly on the visual evidence in the image, not on prior knowledge alone. "
-            "Answer concisely and precisely, focusing only on the findings visible in the image. "
-            "Select exactly one of the provided answer choices as the final diagnosis. "
-            "Your response must explicitly include this chosen answer. "
-            "Do NOT mention, compare, or describe any other answer choices. "
-            "Write 1–2 short sentences total: "
-            "one sentence should describe the key visual evidence, "
-            "and one sentence must state the final answer. "
-            "Ensure the reasoning and conclusion rely directly on the image and are consistent with the chosen answer."
+        self.doctor_prompt1 = (
+            "You are a medical doctor analyzing a clinical image."
+            "Base your reasoning strictly on the visible evidence in the image."
         )
-
+        self.doctor_prompt2 = (
+            "Write exactly TWO sentences in the following format:"
+            "<option><option text>:"
+            "Evidence: <one concise sentence describing the key visual reasoning>"
+        )
 
         self._visdep_map = self._load_visdep_sidecar(visdep_sidecar) if visdep_sidecar else {}
 
@@ -110,7 +106,7 @@ class OmniMedVQA_Dataset(Dataset):
                         ip = obj.get("question_id")
                         sc = obj.get("visdep_score")
                         if ip is not None and isinstance(sc, (int, float)):
-                            m[os.path.abspath(ip)] = float(max(0.0, min(1.0, sc)))
+                            m[ip] = float(max(0.0, min(1.0, sc)))
                     except Exception:
                         continue
         else:  # json
@@ -261,8 +257,9 @@ class OmniMedVQA_Dataset(Dataset):
                 break
 
         opt_text = "\n".join(f"{letter}. {opt}" for letter, opt in options)
-        prefix = (self.doctor_prompt + "\n") if self.use_doctor_prompt else ""
-        query = prefix + f"{question}\nOptions:\n{opt_text}"
+        prefix1 = (self.doctor_prompt1 + "\n") if self.use_doctor_prompt else ""
+        prefix2 = (self.doctor_prompt2 + "\n") if self.use_doctor_prompt else ""
+        query = prefix1 + f"\nQuestion:\n{question}\nOptions:\n{opt_text}\nAnswer:\n" + prefix2
 
         input_data = self.model.build_conversation_input_ids(
             tokenizer=self.tokenizer,
@@ -298,5 +295,12 @@ class OmniMedVQA_Dataset(Dataset):
             else:
                 if isinstance(input_data[key], torch.Tensor):
                     input_data[key] = input_data[key].to(self.device)
+
+        question_id = s['question_id']
+        question_type = s['question_type']
+        modality_type = s['modality_type']
+        input_data['question_id'] = question_id
+        input_data['question_type'] = question_type
+        input_data['modality_type'] = modality_type
 
         return input_data

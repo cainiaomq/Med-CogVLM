@@ -43,12 +43,22 @@ def _encode_txt(embedder, texts: List[str]) -> torch.Tensor:
 # 文本解析与格式工具
 # =========================
 _ANS_TAG_RE = re.compile(r"<\s*answer\s*>\s*(.*?)\s*<\s*/\s*answer\s*>", re.I | re.S)
+# _LETTER_HEAD_RE = re.compile(r'^\s*([A-D1-4])[\)\].、．\s-]*', re.I)
 _LETTER_ANY_RE = re.compile(
-    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'
-    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'
-    r'\s*[\)\].、．：:]\s*',
+    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'      # 前面不是字母数字（词边界）
+    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'        # A-D / 全角 / 1-4
+    r'(?:\s*[\)\].、．：:]\s*|\s+|$)',     # 后面是标点/空白/行尾 三选一
     re.I
 )
+
+# 一些常见同义归一（可按需补充）
+_SYNONYM_MAP = {
+    "x ray": "xray", "xray": "xray", "radiograph": "xray", "plain film": "xray",
+    "ct": "ct", "computed tomography": "ct",
+    "mri": "mri", "magnetic resonance imaging": "mri",
+    "yes": "yes", "true": "yes", "positive": "yes",
+    "no": "no", "false": "no", "negative": "no",
+}
 
 def _normalize_letter(x: str) -> str | None:
     x = x.translate(str.maketrans("ＡＢＣＤａｂｃｄ１２３４", "ABCDabcd1234")).upper()
@@ -69,8 +79,28 @@ def _extract_head_letter_and_tail(s: str):
     if m:
         letter = _normalize_letter(m.group(1))
         if letter:
-            return letter
-    return None
+            return letter, s[m.end():].strip()
+    return None, s.strip()
+
+def _normalize_string(s: str) -> str:
+    if not isinstance(s, str): return ""
+    s = s.strip().lower()
+    s = _ANS_TAG_RE.sub(lambda m: m.group(1).strip().lower(), s)
+    s = re.sub(r"[^\w\s\-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    toks = s.split()
+    toks = [_SYNONYM_MAP.get(t, t) for t in toks]
+    return " ".join(toks)
+
+def _normalize_loose(s: str) -> str:
+    """更宽松的归一：去标点小写空格压缩，适合做包含判断"""
+    if not isinstance(s, str): return ""
+    s = s.strip().lower()
+    table = str.maketrans({c: " " for c in string.punctuation})
+    s = s.translate(table)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
 
 # =========================
 # 准确率奖励（示例逻辑：符号验证优先，其次字符串/标签匹配）
@@ -79,6 +109,7 @@ def _extract_head_letter_and_tail(s: str):
 def accuracy_reward_bk(
     pred_texts: List[str],
     gold_texts: List[str],
+    question_id: List[str],
     B: int,
     K: int,
     device: torch.device,
@@ -100,6 +131,7 @@ def accuracy_reward_bk(
         for b in range(B):
             content_full = pred_texts[i * B + b]
             gold_full = gold_texts[b]
+            question_full = question_id[b]
 
             # 先抽取 <answer> 标签（若存在）
             content_core = _extract_answer_tag(content_full)
@@ -112,12 +144,44 @@ def accuracy_reward_bk(
 
             reward = 0.0
             try:
-                pl = _extract_head_letter_and_tail(content_core)
-                gl = _extract_head_letter_and_tail(gold_core)
+                # 1) 选项字母匹配（优先）
+                pl, p_tail = _extract_head_letter_and_tail(content_core)
+                gl, g_tail = _extract_head_letter_and_tail(gold_core)
                 if pl and gl and (pl == gl):
                     reward = 1.0
-
+                
+                # 2) 文本匹配（规范化/宽松包含）
+                if reward == 0.0:
+                    p_norm = _normalize_string(p_tail if pl else content_core)
+                    g_norm = _normalize_string(g_tail if gl else gold_core)
+                    # 完全相等（规范化后）
+                    if p_norm and g_norm and (p_norm == g_norm):
+                        reward = 1.0
+                    else:
+                        # 宽松包含（缓解冗余描述）
+                        p_loose = _normalize_loose(p_tail if pl else content_core)
+                        g_loose = _normalize_loose(g_tail if gl else gold_core)
+                        if p_loose and g_loose:
+                            if len(g_loose) <= 3:
+                                # gold 很短（如 "no"/"yes"/"ok"），检查 pred 是否含有独立词
+                                if re.search(rf'\b{re.escape(g_loose)}\b', p_loose):
+                                    reward = 1.0
+                            elif len(p_loose) <= 3:
+                                # pred 很短，反过来检查
+                                if re.search(rf'\b{re.escape(p_loose)}\b', g_loose):
+                                    reward = 1.0
+                            else:
+                                # 两边都不短，再用原来的包含逻辑
+                                if (g_loose in p_loose) or (p_loose in g_loose):
+                                    reward = 1.0
+                
+                # 3) 兜底：原始完整串规范化相等
+                if reward == 0.0:
+                    if _normalize_string(content_full) == _normalize_string(gold_full):
+                        reward = 1.0
+                
             except Exception:
+                # 静默失败，按 0 计
                 pass
 
             vals.append(reward)
@@ -126,11 +190,40 @@ def accuracy_reward_bk(
             if log_path:
                 try:
                     with open(log_path, "a", encoding="utf-8") as f:
-                        f.write(f"------------- {current_time} Accuracy reward: {reward} -------------\n")
+                        f.write(f"------------- {current_time} ----- question_id: {question_full} ----- Accuracy reward: {reward} -------------\n")
                         f.write(f"Content: {content_full}\n")
                         f.write(f"Solution: {gold_full}\n")
                 except Exception:
                     pass
+
+    return torch.tensor(vals, device=device, dtype=torch.float32).view(K, B).T.contiguous()
+
+# =========================
+# 简单格式奖励：Evidence / Final
+# =========================
+@torch.no_grad()
+def format_reward_simple(
+    pred_texts: List[str],
+    B: int,
+    K: int,
+    device: torch.device,
+    log_path: Optional[str] = None,
+) -> torch.Tensor:
+    """
+    如果回答同时包含 'Evidence:' 和 'Final:' 则奖励=1，否则=0
+    返回 [B,K]
+    """
+    vals = []
+    ts = datetime.now().strftime("%d-%H-%M-%S-%f")
+
+    for i in range(K):
+        for b in range(B):
+            s = pred_texts[i * B + b]
+            r = 0.0
+            if isinstance(s, str):
+                if "evidence:" in s.lower() or "Explanation:" in s.lower():
+                    r = 0.5
+            vals.append(r)
 
     return torch.tensor(vals, device=device, dtype=torch.float32).view(K, B).T.contiguous()
 
@@ -258,6 +351,7 @@ def build_rewards(
     *,
     pred_texts: List[str],    # 长度 B*K，顺序：先 K 后 B
     gold_texts: List[str],    # 长度 B
+    question_id: List[str],
     embedder=None,
     images=None,
     B: int,
@@ -283,7 +377,9 @@ def build_rewards(
       - 这里不做加权与标准化，只提供原始项（便于主循环做标准化、组内归一、裁剪等策略）。
     """
     # 1) 文本类奖励
-    r_acc = accuracy_reward_bk(pred_texts, gold_texts, B, K, device, acc_log_path) if w_acc > 0 else None
+    r_acc = accuracy_reward_bk(pred_texts, gold_texts, question_id,B, K, device, acc_log_path) if w_acc > 0 else None
+    r_fmt = format_reward_simple(pred_texts, B, K, device)
+    r_acc = r_acc + r_fmt
 
     # 2) 视觉类奖励（可选缓存）
     cached_txt = None

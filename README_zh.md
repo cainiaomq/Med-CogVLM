@@ -13,6 +13,7 @@
   3. 使用 **SLAKE** 进行指令微调；  
   4. 最终在 **OmniMedVQA*** 数据上进行 **强化学习（GRPO）训练**。
 + 项目的目标是提升模型在医学任务中的**视觉依赖性**，避免仅凭语言先验作答。
+模型参数已公开在[Med-CogVLM](https://huggingface.co/greedno/Med-CogVLM)
 
 ## 最低配置
 

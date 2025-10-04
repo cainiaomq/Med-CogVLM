@@ -13,6 +13,7 @@ Run this demo to fine-tune **Med-CogVLM** with LoRA — a medical multimodal exp
   3. Instruction fine-tuning on **SLAKE**;  
   4. Final reinforcement learning (**GRPO**) training on **OmniMedVQA**.  
 + The goal is to enhance the model’s **visual dependency** in medical tasks, reducing reliance on text-only priors.
+The model parameters have been made public in [Med-CogVLM](https://huggingface.co/greedno/Med-CogVLM)
 
 ## Minimum Configuration
 
