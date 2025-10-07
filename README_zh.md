@@ -2,7 +2,6 @@
 
 # Med-CogVLM: 基于视觉依赖强化学习的医学多模态模型
 
-[![arXiv](https://img.shields.io/badge/arXiv-2025.xxxxx-b31b1b.svg)](https://arxiv.org/abs/xxxx)
 [![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/greedno/Med-CogVLM)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
