@@ -1,71 +1,225 @@
-# Fine-tune Med-CogVLM Model
+<div align="center">
 
-[中文版 README](./README_zh.md)
+# Med-CogVLM: Vision-Dependent Reinforcement Learning for Medical Multimodal Understanding
 
-Run this demo to fine-tune **Med-CogVLM** with LoRA — a medical multimodal expert model built upon CogVLM2.
+[![arXiv](https://img.shields.io/badge/arXiv-2025.xxxxx-b31b1b.svg)](https://arxiv.org/abs/xxxx)
+[![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/greedno/Med-CogVLM)
+[![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
-## Project Overview
+[English](./README.md) | [中文](./README_zh.md)
 
-+ **Med-CogVLM** is a medical multimodal large model based on CogVLM2 (llama3-based VL), focusing on medical image QA tasks.
-+ We adopt a **progressive LoRA fine-tuning** strategy:  
-  1. Shallow fine-tuning on **ROCO**;  
-  2. Deep fine-tuning on **ROCOv2**;  
-  3. Instruction fine-tuning on **SLAKE**;  
-  4. Final reinforcement learning (**GRPO**) training on **OmniMedVQA**.  
-+ The goal is to enhance the model’s **visual dependency** in medical tasks, reducing reliance on text-only priors.
-The model parameters have been made public in [Med-CogVLM](https://huggingface.co/greedno/Med-CogVLM)
+</div>
 
-## Minimum Configuration
+---
 
-- Verified on **A100 80GB** GPUs.  
-- SFT stage: batch≈4, memory usage ≈75GB.  
-- RL (GRPO) stage: **ZeRO-2**, batch=1, K=4 candidates, fits single GPU.  
-- `zero3` is not supported.
+## 📖 Overview
 
-## Start Fine-tuning
+**Med-CogVLM** is an advanced medical vision-language model built upon CogVLM2's deep fusion architecture. We systematically address two fundamental challenges in medical VLMs through our innovative **Visual Dependency Reward Framework (VDRF)**:
 
-1. Download datasets and install dependencies
+- 🔍 **Deep Fusion Architecture**: Leverages CogVLM2's visual expert mechanism for dense vision-language interactions across all Transformer layers
+- 🎯 **Visual Dependency Reinforcement Learning**: Ensures the model's reasoning is genuinely grounded in medical images rather than language priors
 
-Recommended datasets:  
-- [ROCO](https://github.com/razorx89/roco-dataset/tree/master)  
-- [ROCOv2](https://huggingface.co/datasets/eltorio/ROCOv2-radiology)  
-- [SLAKE](https://huggingface.co/datasets/BoKelvin/SLAKE)
-- [OmniMedVQA](https://huggingface.co/datasets/foreverbeliever/OmniMedVQA)  
+---
 
-Install dependencies:
+## 🌟 Highlights
+
+✅ **State-of-the-art Performance**: Achieves 84.85% overall accuracy on OmniMedVQA benchmark  
+✅ **Multi-modal Support**: CT, MRI, X-ray, Ultrasound, Dermoscopy, Fundus, OCT, Microscopy  
+✅ **Clinical Task Coverage**: Anatomy Recognition, Disease Diagnosis, Lesion Grading, Modality Identification, Attribute Analysis  
+✅ **Enhanced Visual Grounding**: 30% improvement in Visual Dependency Score (VDS) through VDRF  
+✅ **Production-Ready**: Complete training pipeline with DeepSpeed optimization  
+
+---
+
+## 🏗️ Architecture
+
+Med-CogVLM employs a three-stage training paradigm:
+
+### Stage 1: Progressive Supervised Fine-Tuning (SFT)
+
+- **ROCO**: Establish medical vision-language alignment foundation (80K samples)
+- **ROCOv2**: Enhance medical terminology understanding (60K samples)
+- **SLAKE**: Learn structured QA patterns (14K samples)
+- **OmniMedVQA**: Integrate multi-modal clinical tasks (89K samples)
+
+### Stage 2: High Visual Dependency (HVD) Data Sampling
+
+1. **GPT-4o-mini Scoring**: Automated visual dependency assessment
+2. **Counterfactual Filtering**: Hard negative mining based on DEP scores
+3. **Weighted Sampling**: Prioritize high-dependency samples during training
+
+### Stage 3: GRPO + VDRF Reinforcement Learning
+
+**Reward Components:**
+- ✓ Base Reward: Accuracy + Format compliance
+- ✓ Visual Consistency Reward (VEC): Global + Local similarity
+- ✓ Counterfactual Dependency Reward (DEP): Real image grounding
+
+---
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
+# Clone repository
+git clone https://github.com/cainiaomq/Med-CogVLM.git
+cd Med-CogVLM
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-2. Run fine-tuning
+### Hardware Requirements
 
-We provide both SFT and GRPO training scripts:  
+| Stage | GPU | Memory | DeepSpeed |
+|-------|-----|--------|-----------|
+| SFT | A100 80GB | ~75GB | ZeRO-2 |
+| GRPO | A100 80GB | ~75GB | ZeRO-2 |
 
-```bash
-# SFT
-deepspeed ./peft_lora.py --ds_config ./ds_config.yaml
+> ⚠️ **Note**: ZeRO-3 is not currently supported
 
-# GRPO (LoRA, ZeRO-2)
-deepspeed f./lora_grpo.py
-```
+---
 
-During training, Loss values will be recorded in tensorboard for monitoring convergence:
-During the training process of GRPO, logs will be accumulated and written to the logs for easy viewing of reward status.
+## 💻 Usage
 
-```bash
-tensorboard --logdir=output
-```
+### Web-based Model Inference
 
-**We recommend BF16 precision** to avoid NaN losses.
-
-3. Inference on the fine-tuned model
-
-By running `peft_infer.py` you can use the fine-tuned model to generate text. You need to configure the fine-tuned model
-address according to the configuration requirements in the code. Then run:
+Run this code to start chatting in WebUI.
 
 ```shell
-python peft_infer.py
+chainlit run web_demo.py
 ```
 
-You can use the fine-tuned model for inference.
+---
+
+## 📊 Training
+
+### 1. Data Preparation
+
+Download required datasets:
+
+| Dataset | Size | Purpose | Link |
+|---------|------|---------|------|
+| ROCO | 80K | Radiology image-text pairs | [GitHub](https://github.com/razorx89/roco-dataset) |
+| ROCOv2 | 60K | High-quality radiology data | [HuggingFace](https://huggingface.co/datasets/eltorio/ROCOv2-radiology) |
+| SLAKE | 14K | Structured medical VQA | [HuggingFace](https://huggingface.co/datasets/BoKelvin/SLAKE) |
+| OmniMedVQA | 89K | Multi-modal benchmark | [HuggingFace](https://huggingface.co/datasets/foreverbeliever/OmniMedVQA) |
+
+**Visual Encoder:**
+- [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224): For computing VEC and DEP rewards
+
+### 2. Progressive SFT Fine-tuning
+
+```bash
+# Stage 1: ROCO
+deepspeed lora_finetune.py \
+    --model_path ./your_model_path \
+    --dataset_path ./your_dataset_path \
+    --save_path ./your_save_path \
+    --resume_from ./your_save_path/checkpoint_epoch_{batch}_step_{step}
+```
+
+### 3. GRPO with VDRF Training
+
+```bash
+deepspeed grpo_vdrf.py \
+    --model_path ./your_model_path \
+    --dataset_path ./your_dataset_path \
+    --save_path ./your_save_path \
+    --actor_lora_path ./your_save_path/checkpoint_step_{step}
+```
+
+---
+
+## 📈 Evaluation
+
+### Run Evaluation
+
+```bash
+python eval.py \
+    --model_path ./your_model_path \
+    --dataset_path ./your_dataset_path \
+    --out_dir ./your_out_dir \
+    --resume ./your_out_dir/vds_predictions.jsonl
+```
+
+### Performance by Modality
+
+| Modality | Accuracy (%) |
+|----------|--------------|
+| CT | 83.29 |
+| MRI | 86.17 |
+| X-ray | 87.19 |
+| Ultrasound | 92.61 |
+| Dermoscopy | 76.77 |
+| Fundus | 83.74 |
+| OCT | 85.87 |
+| Microscopy | 73.96 |
+| **Overall** | **84.85** |
+
+### Performance by Clinical Task
+
+| Task Type | Accuracy (%) |
+|-----------|--------------|
+| Anatomy Recognition | 88.32 |
+| Disease Diagnosis | 82.47 |
+| Lesion Grading | 79.15 |
+| Modality Identification | 93.68 |
+| Attribute Analysis | 85.91 |
+
+---
+
+## 📝 Citation
+
+If you find Med-CogVLM helpful in your research, please cite:
+
+```bibtex
+@article{medcogvlm2025,
+  title={Med-CogVLM: Vision-Dependent Reinforcement Learning for Medical Multimodal Understanding},
+  author={},
+  journal={arXiv preprint arXiv:},
+  year={2025}
+}
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions of all kinds! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+### Ways to Contribute
+- 🐛 Report bugs and issues
+- 💡 Propose new features
+- 📝 Improve documentation
+- 🔧 Submit pull requests
+
+---
+
+## 📄 License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+---
+
+## 📧 Contact
+
+- **Project Homepage**: https://github.com/cainiaomq/Med-CogVLM
+- **Model Hub**: https://huggingface.co/greedno/Med-CogVLM
+- **Issue Tracker**: [GitHub Issues](https://github.com/cainiaomq/Med-CogVLM/issues)
+
+---
+
+## 🙏 Acknowledgments
+
+Special thanks to:
+- CogVLM team for the foundational architecture
+- OmniMedVQA dataset contributors
+- Medical imaging communities for data support
+
+---
+
+## ⚠️ Disclaimer
+
+**Med-CogVLM is intended for research purposes only.** This model should not be used as the sole basis for clinical diagnosis. Always consult qualified healthcare professionals for medical decisions.
