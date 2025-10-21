@@ -88,7 +88,7 @@ pip install -r requirements.txt
 
 ```
 Med-CogVLM/
-├── dataset/              # HVD数据处理脚本
+├── dataset/              # 数据处理脚本
 │   ├── annotate_visdep_omnimedvqa.py
 │   └── dep_checking.py
 ├── rl/                   # 强化学习模块
