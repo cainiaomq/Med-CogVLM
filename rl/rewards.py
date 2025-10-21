@@ -1,5 +1,3 @@
-# finetune_demo/rl/rewards.py
-# -*- coding: utf-8 -*-
 from typing import List, Optional, Tuple, Dict
 import re
 from datetime import datetime
@@ -9,14 +7,7 @@ import torch.nn.functional as F
 from rl.roi import get_local_crops, make_counterfactuals
 
 
-# =========================
-# 工具：余弦相似度与编码
-# =========================
 def _cos(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """
-    规范化后点积：支持形状广播。
-    a: [..., D], b: [..., D] -> return: [... ]
-    """
     a = F.normalize(a, dim=-1)
     b = F.normalize(b, dim=-1)
     return (a * b).sum(-1)
@@ -24,34 +15,21 @@ def _cos(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
 
 @torch.no_grad()
 def _encode_img(embedder, images) -> torch.Tensor:
-    """
-    统一入口：encode B 张图像 -> [B, D]
-    - embedder 需实现 encode_image(list[PIL] or tensor batch)
-    """
-    return embedder.encode_image(images)  # [B, D]
-
+    return embedder.encode_image(images)
 
 @torch.no_grad()
 def _encode_txt(embedder, texts: List[str]) -> torch.Tensor:
-    """
-    统一入口：encode 文本列表 -> [N, D]
-    """
-    return embedder.encode_text(texts)  # [N, D]
+    return embedder.encode_text(texts)
 
 
-# =========================
-# 文本解析与格式工具
-# =========================
 _ANS_TAG_RE = re.compile(r"<\s*answer\s*>\s*(.*?)\s*<\s*/\s*answer\s*>", re.I | re.S)
-# _LETTER_HEAD_RE = re.compile(r'^\s*([A-D1-4])[\)\].、．\s-]*', re.I)
 _LETTER_ANY_RE = re.compile(
-    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'      # 前面不是字母数字（词边界）
-    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'        # A-D / 全角 / 1-4
-    r'(?:\s*[\)\].、．：:]\s*|\s+|$)',     # 后面是标点/空白/行尾 三选一
+    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'
+    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'
+    r'(?:\s*[\)\].、．：:]\s*|\s+|$)',
     re.I
 )
 
-# 一些常见同义归一（可按需补充）
 _SYNONYM_MAP = {
     "x ray": "xray", "xray": "xray", "radiograph": "xray", "plain film": "xray",
     "ct": "ct", "computed tomography": "ct",
@@ -93,7 +71,6 @@ def _normalize_string(s: str) -> str:
     return " ".join(toks)
 
 def _normalize_loose(s: str) -> str:
-    """更宽松的归一：去标点小写空格压缩，适合做包含判断"""
     if not isinstance(s, str): return ""
     s = s.strip().lower()
     table = str.maketrans({c: " " for c in string.punctuation})
@@ -101,10 +78,6 @@ def _normalize_loose(s: str) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-
-# =========================
-# 准确率奖励（示例逻辑：符号验证优先，其次字符串/标签匹配）
-# =========================
 @torch.no_grad()
 def accuracy_reward_bk(
     pred_texts: List[str],
@@ -115,15 +88,6 @@ def accuracy_reward_bk(
     device: torch.device,
     log_path: Optional[str] = None,
 ) -> torch.Tensor:
-    """
-    返回 [B, K]，元素∈{0.0, 1.0}
-    判定优先级：
-      1) 解析 <answer> 标签：若 gold / pred 任一含标签，优先用标签内文本进行后续匹配；
-      2) 选项字母匹配：若 gold/pred 均能提取到 A-D 字母，直接比字母；
-      3) 文本匹配：规范化后严格相等 or 宽松包含；
-      4) 兜底：原始完整串的规范化严格相等。
-    索引顺序保持你现有实现：pred_texts[i*B + b]
-    """
     vals: List[float] = []
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
 
@@ -133,7 +97,6 @@ def accuracy_reward_bk(
             gold_full = gold_texts[b]
             question_full = question_id[b]
 
-            # 先抽取 <answer> 标签（若存在）
             content_core = _extract_answer_tag(content_full)
             if content_core is None:
                 content_core = content_full
@@ -144,49 +107,38 @@ def accuracy_reward_bk(
 
             reward = 0.0
             try:
-                # 1) 选项字母匹配（优先）
                 pl, p_tail = _extract_head_letter_and_tail(content_core)
                 gl, g_tail = _extract_head_letter_and_tail(gold_core)
                 if pl and gl and (pl == gl):
                     reward = 1.0
                 
-                # 2) 文本匹配（规范化/宽松包含）
                 if reward == 0.0:
                     p_norm = _normalize_string(p_tail if pl else content_core)
                     g_norm = _normalize_string(g_tail if gl else gold_core)
-                    # 完全相等（规范化后）
                     if p_norm and g_norm and (p_norm == g_norm):
                         reward = 1.0
                     else:
-                        # 宽松包含（缓解冗余描述）
                         p_loose = _normalize_loose(p_tail if pl else content_core)
                         g_loose = _normalize_loose(g_tail if gl else gold_core)
                         if p_loose and g_loose:
                             if len(g_loose) <= 3:
-                                # gold 很短（如 "no"/"yes"/"ok"），检查 pred 是否含有独立词
                                 if re.search(rf'\b{re.escape(g_loose)}\b', p_loose):
                                     reward = 1.0
                             elif len(p_loose) <= 3:
-                                # pred 很短，反过来检查
                                 if re.search(rf'\b{re.escape(p_loose)}\b', g_loose):
                                     reward = 1.0
                             else:
-                                # 两边都不短，再用原来的包含逻辑
                                 if (g_loose in p_loose) or (p_loose in g_loose):
                                     reward = 1.0
-                
-                # 3) 兜底：原始完整串规范化相等
                 if reward == 0.0:
                     if _normalize_string(content_full) == _normalize_string(gold_full):
                         reward = 1.0
                 
             except Exception:
-                # 静默失败，按 0 计
                 pass
 
             vals.append(reward)
 
-            # 调试日志
             if log_path:
                 try:
                     with open(log_path, "a", encoding="utf-8") as f:
@@ -198,21 +150,13 @@ def accuracy_reward_bk(
 
     return torch.tensor(vals, device=device, dtype=torch.float32).view(K, B).T.contiguous()
 
-# =========================
-# 简单格式奖励：Evidence / Final
-# =========================
 @torch.no_grad()
 def format_reward_simple(
     pred_texts: List[str],
     B: int,
     K: int,
     device: torch.device,
-    log_path: Optional[str] = None,
 ) -> torch.Tensor:
-    """
-    如果回答同时包含 'Evidence:' 和 'Final:' 则奖励=1，否则=0
-    返回 [B,K]
-    """
     vals = []
     ts = datetime.now().strftime("%d-%H-%M-%S-%f")
 
@@ -227,25 +171,18 @@ def format_reward_simple(
 
     return torch.tensor(vals, device=device, dtype=torch.float32).view(K, B).T.contiguous()
 
-# =========================
-# 视觉一致性奖励：global / local / DEP （带日志）
-# =========================
 @torch.no_grad()
 def vec_global(
     embedder, images, texts: List[str], B: int, K: int,
     cached_txt: torch.Tensor = None, cached_img: torch.Tensor = None,
     log_path: Optional[str] = None
 ) -> torch.Tensor:
-    """
-    整图-文本的余弦相似度，返回 [B, K]
-    可选：传入 cached_txt / cached_img 以避免重复编码。
-    """
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
 
-    img = cached_img if cached_img is not None else _encode_img(embedder, images)  # [B, D]
-    txt_all = cached_txt if cached_txt is not None else _encode_txt(embedder, texts)  # [B*K, D]
-    txt = txt_all.view(K, B, -1).transpose(0, 1).contiguous()  # [B, K, D]
-    sim = _cos(img.unsqueeze(1), txt)  # [B, K]
+    img = cached_img if cached_img is not None else _encode_img(embedder, images)
+    txt_all = cached_txt if cached_txt is not None else _encode_txt(embedder, texts)
+    txt = txt_all.view(K, B, -1).transpose(0, 1).contiguous()
+    sim = _cos(img.unsqueeze(1), txt)
 
     if log_path:
         try:
@@ -272,27 +209,24 @@ def vec_local(
     cached_txt: torch.Tensor = None,
     log_path: Optional[str] = None,
 ) -> torch.Tensor:
-    """
-    ROI-文本相似度，返回 [B, K]
-    """
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
 
-    roi_lists = get_local_crops(images, n_rois=n_rois)  # List[B][n]
-    flat_rois = [r for rs in roi_lists for r in rs]     # B*n
+    roi_lists = get_local_crops(images, n_rois=n_rois)
+    flat_rois = [r for rs in roi_lists for r in rs]
 
-    img_bn = embedder.encode_image(flat_rois).view(B, n_rois, -1)  # [B, n, D]
+    img_bn = embedder.encode_image(flat_rois).view(B, n_rois, -1)
 
-    txt_all = cached_txt if cached_txt is not None else _encode_txt(embedder, texts)  # [B*K, D]
-    txt = txt_all.view(K, B, -1).transpose(0, 1).contiguous()  # [B, K, D]
+    txt_all = cached_txt if cached_txt is not None else _encode_txt(embedder, texts)
+    txt = txt_all.view(K, B, -1).transpose(0, 1).contiguous()
 
-    img_n = F.normalize(img_bn, dim=-1).unsqueeze(2)  # [B, n, 1, D]
-    txt_n = F.normalize(txt, dim=-1).unsqueeze(1)     # [B, 1, K, D]
-    sim = (img_n * txt_n).sum(-1)                     # [B, n, K]
+    img_n = F.normalize(img_bn, dim=-1).unsqueeze(2)
+    txt_n = F.normalize(txt, dim=-1).unsqueeze(1)
+    sim = (img_n * txt_n).sum(-1)
 
     if reduce == "max":
-        r = sim.max(dim=1).values   # [B, K]
+        r = sim.max(dim=1).values
     else:
-        r = sim.mean(dim=1)         # [B, K]
+        r = sim.mean(dim=1)
 
     if log_path:
         try:
@@ -320,9 +254,6 @@ def dep(
     cached_img: torch.Tensor = None,
     log_path: Optional[str] = None,
 ) -> torch.Tensor:
-    """
-    real - counterfactual：差值越大说明依赖真实视觉细节
-    """
     current_time = datetime.now().strftime("%d-%H-%M-%S-%f")
 
     real = vec_global(embedder, images, texts, B, K, cached_txt=cached_txt, cached_img=cached_img)
@@ -343,14 +274,11 @@ def dep(
 
     return diff
 
-# =========================
-# 统一打包入口（包含 acc / fmt / global / local / dep）
-# =========================
 @torch.no_grad()
 def build_rewards(
     *,
-    pred_texts: List[str],    # 长度 B*K，顺序：先 K 后 B
-    gold_texts: List[str],    # 长度 B
+    pred_texts: List[str],
+    gold_texts: List[str],
     question_id: List[str],
     embedder=None,
     images=None,
@@ -369,23 +297,13 @@ def build_rewards(
     vec_l_log_path: Optional[str] = None,
     dep_log_path: Optional[str] = None,
 ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
-    """
-    统一构建奖励，返回 (r_acc, r_g, r_l, r_dep)，各项形状均为 [B, K] 或 None。
-    说明：
-      - acc/fmt 不依赖 embedder/images；
-      - global/local/dep 依赖 embedder/images，且内部做了必要的缓存避免重复编码；
-      - 这里不做加权与标准化，只提供原始项（便于主循环做标准化、组内归一、裁剪等策略）。
-    """
-    # 1) 文本类奖励
     r_acc = accuracy_reward_bk(pred_texts, gold_texts, question_id,B, K, device, acc_log_path) if w_acc > 0 else None
     r_fmt = format_reward_simple(pred_texts, B, K, device)
     r_acc = r_acc + r_fmt
 
-    # 2) 视觉类奖励（可选缓存）
     cached_txt = None
     cached_img = None
     if (w_g > 0 or w_l > 0 or w_dep > 0):
-        # 仅当至少一个视觉奖励启用时才做编码缓存
         if (embedder is not None) and (images is not None):
             if (w_g > 0 or w_l > 0 or w_dep > 0):
                 cached_txt = _encode_txt(embedder, pred_texts) if (w_g > 0 or w_l > 0 or w_dep > 0) else None
@@ -404,17 +322,11 @@ def build_rewards(
 
     return r_acc, r_g, r_l, r_dep
 
-
-# ========== 标准化/混合/优势 ==========
 def _std_norm(x: torch.Tensor, eps=1e-6):
     mu = x.mean(); sd = x.std() + eps
     return (x-mu)/sd
 
 def standardize_each_then_mix(parts: Dict[str, Tuple[torch.Tensor, float]]):
-    """
-    对每个奖励 r_i 先做全局（批维度）标准化 → w_i * r_i → 求和
-    返回：合成奖励 [B,K] 与各项贡献均值（便于日志）
-    """
     out = None; logs={}
     for name, (ri, wi) in parts.items():
         if wi == 0.0 or ri is None: logs[name]=0.0; continue
@@ -428,9 +340,6 @@ def standardize_each_then_mix(parts: Dict[str, Tuple[torch.Tensor, float]]):
     return out, logs
 
 def group_norm_and_clip(r_bk: torch.Tensor, clip: float = 5.0):
-    """
-    先按组（每行 B）做 z-norm → 再裁剪稳定数值 → 返回优势矩阵 [B,K]
-    """
     B, K = r_bk.size()
     mu = r_bk.mean(dim=1, keepdim=True)
     sd = r_bk.std(dim=1, keepdim=True) + 1e-6

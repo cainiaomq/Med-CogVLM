@@ -34,7 +34,7 @@ class ROCO_Dataset(Dataset):
             for line_idx, line in enumerate(f):
                 line = line.strip()
                 if not line or '\t' not in line:
-                    print(f"[Line {line_idx}] 格式错误或空行: {line}")
+                    print(f"[Line {line_idx}] format error or blank line: {line}")
                     continue
                 try:
                     image_id, caption = line.split('\t', 1)
@@ -42,10 +42,10 @@ class ROCO_Dataset(Dataset):
                     if os.path.exists(img_path):
                         samples.append({'image_path': img_path, 'caption': caption})
                     else:
-                        print(f"[Line {line_idx}] 图像不存在: {img_path}")
+                        print(f"[Line {line_idx}] image does not exist: {img_path}")
                 except Exception as e:
-                    print(f"[Line {line_idx}] 解析失败: {e} | 内容: {line}")
-        print(f"[ROCO_Dataset] 成功加载样本数: {len(samples)}")
+                    print(f"[Line {line_idx}] parsing failed: {e} | Content: {line}")
+        print(f"[ROCO-Dataset] Successfully loaded sample count: {len(samples)}")
         return samples
 
 

@@ -27,7 +27,7 @@ class ROCOv2_Dataset(Dataset):
 
         data_path = os.path.join(self.root_dir, "data")
         self.dataset = load_dataset("parquet", data_dir=data_path, split=split)
-        print(f"[ROCOv2_Dataset] 成功加载样本数: {len(self.dataset)}")
+        print(f"[ROCOv2_Dataset] Successfully loaded sample count: {len (self. dataset)}")
 
     def __len__(self):
         return len(self.dataset)
@@ -47,7 +47,6 @@ class ROCOv2_Dataset(Dataset):
     def __getitem__(self, idx):
         sample = self.dataset[idx]
 
-        # Hugging Face datasets 会自动 decode 为 PIL Image，但本地 parquet 可能为路径/bytes，需要手动加载
         image = sample["image"]
         if isinstance(image, dict) and "bytes" in image:
             image = Image.open(image["path"] if "path" in image else image["bytes"]).convert("RGB")
@@ -56,7 +55,7 @@ class ROCOv2_Dataset(Dataset):
         elif isinstance(image, Image.Image):
             image = image.convert("RGB")
         else:
-            raise ValueError(f"无法识别的 image 格式: {type(image)}")
+            raise ValueError(f"Unrecognized image format: {type (image)}")
 
         caption = sample["caption"]
 

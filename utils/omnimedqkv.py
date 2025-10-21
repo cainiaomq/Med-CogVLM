@@ -14,14 +14,14 @@ class OmniMedVQA_Dataset(Dataset):
                  input_length=1024,
                  output_length=1024,
                  use_doctor_prompt: bool = True,
-                 access='open',                    # 'open' or 'both'
+                 access='open',
                  split_files=None,
-                 visdep_sidecar: str = None,       # 可选：JSONL(推荐)/JSON，按 question_id → visdep_score
-                 visdep_min_score: float = None,   # 可选：过滤阈值（如 0.7 只留高依赖）
-                 visdep_weighting: bool = False,    # 可选：输出 visdep_weight = 0.5+0.5*score
-                 dep_sidecar: str = None,          # JSONL/JSON：按 question_id → dep
-                 dep_min: float = 0.0,            # 过滤阈值（例如 0.0 表示丢弃 dep<0）
-                 keep_if_dep_missing: bool = True  # sidecar 里找不到 dep 时是否保留
+                 visdep_sidecar: str = None,
+                 visdep_min_score: float = None,
+                 visdep_weighting: bool = False,
+                 dep_sidecar: str = None,
+                 dep_min: float = 0.0,
+                 keep_if_dep_missing: bool = True
                  ):
         self.root_dir = root_dir
         self.tokenizer = tokenizer
@@ -59,21 +59,19 @@ class OmniMedVQA_Dataset(Dataset):
         if access == 'both':
             self.qa_dirs.append(os.path.join(qa_base, 'Restricted-access'))
         if not self.qa_dirs:
-            raise ValueError(f"参数 access='{access}' 无效或不包含任何 QA 信息路径。")
+            raise ValueError(f"parameter access='{access}' Invalid or does not contain any QA information path。")
 
         self.visdep_min_score = visdep_min_score
         self.visdep_weighting = visdep_weighting
 
         self.samples = self._load_samples()
-        # === 可选：按分数过滤 ===
         if self.visdep_min_score is not None:
             before = len(self.samples)
             self.samples = [s for s in self.samples if s.get('visdep_score', 0.5) >= float(self.visdep_min_score)]
-            print(f"[OmniMedVQA_Dataset] 视觉依赖过滤: {before} → {len(self.samples)} (阈值≥{self.visdep_min_score})")
+            print(f"[OmniMedVQA_Dataset] Visual dependency filtering: {before} → {len(self.samples)} (threshold≥{self.visdep_min_score})")
 
-        print(f"[OmniMedVQA_Dataset] 成功加载样本数: {len(self.samples)}")
+        print(f"[OmniMedVQA_Dataset] Number of samples successfully loaded: {len(self.samples)}")
 
-        # === dep 阈值过滤 ===
         if self.dep_min is not None:
             before = len(self.samples)
             kept, dropped = [], 0
@@ -90,11 +88,11 @@ class OmniMedVQA_Dataset(Dataset):
                     else:
                         dropped += 1
             self.samples = kept
-            print(f"[OmniMedVQA_Dataset] dep 过滤: {before} → {len(self.samples)} (阈值≥{self.dep_min}，丢弃 {dropped} 条)")
+            print(f"[OmniMedVQA_Dataset] dep filter: {before} → {len(self.samples)} (threshold≥{self.dep_min}，discard {dropped} items)")
 
     def _load_visdep_sidecar(self, path):
         if not os.path.exists(path):
-            print(f"[OmniMedVQA_Dataset] visdep_sidecar 文件不存在: {path}")
+            print(f"[OmniMedVQA_Dataset] visdep_sidecar file does not exist: {path}")
             return {}
         m = {}
         if path.endswith(".jsonl"):
@@ -109,10 +107,9 @@ class OmniMedVQA_Dataset(Dataset):
                             m[ip] = float(max(0.0, min(1.0, sc)))
                     except Exception:
                         continue
-        else:  # json
+        else:
             try:
                 data = json.load(open(path, "r", encoding="utf-8"))
-                # 支持两种格式：list[{"image_path":..., "visdep_score":...}] 或 dict[image_path]=score
                 if isinstance(data, list):
                     for obj in data:
                         ip = obj.get("question_id")
@@ -124,13 +121,13 @@ class OmniMedVQA_Dataset(Dataset):
                         if isinstance(sc, (int, float)):
                             m[os.path.abspath(ip)] = float(max(0.0, min(1.0, sc)))
             except Exception as e:
-                print(f"[OmniMedVQA_Dataset] 解析 sidecar 失败: {path} | {e}")
-        print(f"[OmniMedVQA_Dataset] 载入 visdep_sidecar 条目数: {len(m)}")
+                print(f"[OmniMedVQA_Dataset] Failed to parse the side car: {path} | {e}")
+        print(f"[OMNIMedVQA_Dataset] Load the number of entries for visdep_stecar: {len(m)}")
         return m
 
     def _load_dep_sidecar(self, path: str):
         if not os.path.exists(path):
-            print(f"[OmniMedVQA_Dataset] dep_sidecar 文件不存在: {path}")
+            print(f"[OMNIMedVQA-Data] The dep_stecar file does not exist: {path}")
             return {}
         m = {}
         def _clip(x): return float(max(-1.0, min(1.0, float(x))))
@@ -146,7 +143,6 @@ class OmniMedVQA_Dataset(Dataset):
                         qid = obj.get("question_id")
                         dep = obj.get("dep", obj.get("dep_score", None))
                         if dep is None:
-                            # 兼容 vec_g / vec-cf 自动计算
                             vg = obj.get("vec_g", None)
                             vcf = obj.get("vec-cf", obj.get("vec_cf", None))
                             if vg is not None and vcf is not None:
@@ -167,20 +163,19 @@ class OmniMedVQA_Dataset(Dataset):
                         if qid is not None and isinstance(dep, (int, float)):
                             m[str(qid)] = _clip(dep)
                 elif isinstance(data, dict):
-                    # 若是 {question_id: dep}
                     for qid, dep in data.items():
                         if isinstance(dep, (int, float)):
                             m[str(qid)] = _clip(dep)
-            print(f"[OmniMedVQA_Dataset] 载入 dep_sidecar 条目数: {len(m)}")
+            print(f"[OMNIMedVQA-Dataset] Load the number of dep_stecar entries: {len(m)}")
         except Exception as e:
-            print(f"[OmniMedVQA_Dataset] 解析 dep_sidecar 失败: {path} | {e}")
+            print(f"[OMNIMedVQA-Dataset] parsing dep_stecar failed: {path} | {e}")
         return m
 
     def _load_samples(self):
         samples = []
         for qa_dir in self.qa_dirs:
             if not os.path.isdir(qa_dir):
-                print(f"[OmniMedVQA_Dataset] QA 文件夹不存在: {qa_dir}")
+                print(f"The QA folder does not exist: {qa_dir}")
                 continue
             for fname in os.listdir(qa_dir):
                 if not fname.endswith('.json'):
@@ -193,7 +188,7 @@ class OmniMedVQA_Dataset(Dataset):
                     with open(path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                 except Exception as e:
-                    print(f"[OmniMedVQA_Dataset] 解析 JSON 失败: {path} | {e}")
+                    print(f"[OMniMedVQA-Data] parsing JSON failed: {path} | {e}")
                     continue
 
                 for item in data:
@@ -204,11 +199,10 @@ class OmniMedVQA_Dataset(Dataset):
                     if not os.path.exists(img_abs):
                         img_abs = os.path.join(self.root_dir, 'Images', img_rel)
                     if not os.path.exists(img_abs):
-                        print(f"[Missing Image] {img_abs} 不存在，跳过该项。")
+                        print(f"[Missing Image] {img_abs} does not exist, skip this item。")
                         continue
                     img_abs = os.path.abspath(img_abs)
 
-                    # === 读取 visdep_score：优先题目 JSON，其次 sidecar，默认为 0.5 中性 ===
                     vscore = item.get('visdep_score', None)
                     if not isinstance(vscore, (int, float)):
                         vscore = self._visdep_map.get(item.get('question_id'), 0.5)
@@ -283,7 +277,7 @@ class OmniMedVQA_Dataset(Dataset):
         norm = lambda x: " ".join((x or "").strip().lower().rstrip(".。").split())
         g = norm(gt)
         input_data['answer_text'] = g
-        input_data['options_text'] = opt_text  # 便于日志
+        input_data['options_text'] = opt_text
         vs = float(s['visdep_score'])
         input_data['visdep_score'] = torch.tensor(vs, device=self.device, dtype=torch.float32)
         if self.visdep_weighting:

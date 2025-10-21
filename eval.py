@@ -17,13 +17,9 @@ from rl.embedder import MedClipEmbedder
 from rl.roi import make_counterfactuals
 import torch.nn.functional as F
 
-
-# ===========
-# 解析预测选项（仅统计 A-D/1-4，其他忽略）
-# ===========
 _LETTER_ANY_RE = re.compile(
-    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'         # 左边不是字母数字
-    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'           # 捕获 A-D / 全角 / a-d / 1-4 / 全角1-4
+    r'(?<![A-Za-z0-9Ａ-Ｚａ-ｚ０-９])'
+    r'([A-DＡ-Ｄa-dａ-ｄ1-4１-４])'
 )
 _FULL_TO_HALF = str.maketrans('ａｂｃｄＡＢＣＤ１２３４', 'abcdABCD1234')
 
@@ -42,7 +38,6 @@ def normalize_letter(txt: str) -> str:
     return ""
 
 def _cos(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """余弦相似度"""
     a = F.normalize(a, dim=-1)
     b = F.normalize(b, dim=-1)
     return (a * b).sum(-1)
@@ -53,30 +48,11 @@ def compute_vds(
     embedder,
     images,
     texts: List[str],
-    blur_sigma: float = 3.0,
-    shuffle_grid: int = 4,
 ) -> List[float]:
-    """
-    计算每个文本的视觉依赖分数
-    VDS = cos(img, text) - cos(counterfactual_img, text)
-    """
-    # 编码原始图像和文本
     img_emb = embedder.encode_image(images)
     txt_emb = embedder.encode_text(texts)
     sim_real = _cos(img_emb, txt_emb)
-    
-    # 生成反事实图像并计算相似度
-    cf_images = make_counterfactuals(
-        images, 
-        blur_sigma=blur_sigma, 
-        shuffle_grid=shuffle_grid
-    )
-    cf_emb = embedder.encode_image(cf_images)
-    sim_cf = _cos(cf_emb, txt_emb)
-    
-    # VDS = 真实 - 反事实
-    vds = sim_real - sim_cf
-    
+    vds = sim_real
     return vds.cpu().tolist()
 
 
@@ -94,8 +70,6 @@ def run_vds_evaluation(
     visdep_min_score: float = None,
     access: str = "open",
     resume: bool = False,
-    blur_sigma: float = 3.0,
-    shuffle_grid: int = 4,
 ):
     os.makedirs(os.path.dirname(out_pred_jsonl), exist_ok=True)
     dtype = eval(dtype_str)
@@ -129,13 +103,11 @@ def run_vds_evaluation(
         collate_fn=OmniMedVQA_Dataset.custom_collate_fn
     )
 
-    # 加载 MedCLIP
     print(">> Loading MedCLIP embedder...")
     embedder = MedClipEmbedder()
     embedder.eval()
     print(">> MedCLIP ready.")
 
-    # 恢复机制
     done_qids = set()
     if resume and os.path.exists(out_pred_jsonl):
         with open(out_pred_jsonl, "r", encoding="utf-8") as f:
@@ -161,7 +133,6 @@ def run_vds_evaluation(
             if len(keep_idx) == 0:
                 continue
 
-            # 子采样 batch
             def _take(v):
                 if isinstance(v, list):
                     return [v[i] for i in keep_idx]
@@ -171,7 +142,6 @@ def run_vds_evaluation(
 
             batch = {k: _take(v) for k, v in batch.items()}
 
-            # 切分 prompt
             prompts, prompt_attn, _, images_raw, extra = split_prompt_from_sft_batch(batch, tokenizer)
             
             if images_raw is None:
@@ -195,20 +165,16 @@ def run_vds_evaluation(
                 do_sample=(temperature > 0),
             )
 
-            # 生成长文本
             out_ids = model.generate(**gen_inputs, **gen_kwargs)
             P = prompts.shape[1]
             comp_ids = out_ids[:, P:]
             pred_texts = [tokenizer.decode(x, skip_special_tokens=True).strip() for x in comp_ids]
 
-            # 计算 VDS
             if images_raw is not None and len(pred_texts) > 0:
                 vds_scores = compute_vds(
                     embedder=embedder,
                     images=images_raw,
                     texts=pred_texts,
-                    blur_sigma=blur_sigma,
-                    shuffle_grid=shuffle_grid,
                 )
             else:
                 vds_scores = [0.0] * len(pred_texts)
@@ -248,7 +214,6 @@ def run_vds_evaluation(
 
 
 def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
-    """统计 VDS 分数 + 准确率"""
     from collections import Counter
     
     records = []
@@ -266,12 +231,10 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
         print("[VDS Eval] No records found")
         return
 
-    # ===== 准确率统计 =====
     total, correct = 0, 0
     by_qtype_total, by_qtype_correct = Counter(), Counter()
     by_modal_total, by_modal_correct = Counter(), Counter()
 
-    # ===== VDS 统计 =====
     vds_values = []
     text_lengths = []
     vds_by_qtype = defaultdict(list)
@@ -281,11 +244,10 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
         qtype = r.get("question_type", "Unknown")
         modal = r.get("modality_type", "Unknown")
         
-        # 统计准确率
         pred_opt = (r.get("pred_option") or "").upper()
         gt_opt = (r.get("gt_option") or "").upper()
         
-        if gt_opt:  # 只统计有 ground truth 的样本
+        if gt_opt:
             total += 1
             by_qtype_total[qtype] += 1
             by_modal_total[modal] += 1
@@ -295,7 +257,6 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
                 by_qtype_correct[qtype] += 1
                 by_modal_correct[modal] += 1
         
-        # 统计 VDS
         if "vds" in r:
             vds_values.append(r["vds"])
             vds_by_qtype[qtype].append(r["vds"])
@@ -319,7 +280,6 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
         }
 
     def _pack_acc(total_ctr: Counter, correct_ctr: Counter):
-        """打包准确率统计"""
         keys = sorted(total_ctr.keys())
         out = {}
         for k in keys:
@@ -356,11 +316,9 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
     print(f"[VDS Eval] Statistics saved to {out_summary_json}")
     print(f"{'='*60}")
     
-    # 打印准确率
     print(f"ACCURACY:")
     print(f"  Overall: {acc:.4f} ({correct}/{total})")
     
-    # 打印 VDS
     print(f"\nVDS:")
     print(f"  Overall: mean={summary['vds']['overall']['mean']:.4f}, "
           f"std={summary['vds']['overall']['std']:.4f}, "
@@ -368,7 +326,6 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
     print(f"  Text Length: mean={summary['vds']['text_length']['mean']:.1f}, "
           f"median={summary['vds']['text_length']['median']:.1f}")
     
-    # 按问题类型
     print(f"\nBy Question Type:")
     all_qtypes = sorted(set(list(by_qtype_total.keys()) + list(vds_by_qtype.keys())))
     for k in all_qtypes:
@@ -380,7 +337,6 @@ def analyze_vds_statistics(pred_jsonl: str, out_summary_json: str):
         
         print(f"  {k:35s}: {acc_str:25s} | {vds_str}")
     
-    # 按模态类型
     print(f"\nBy Modality Type:")
     all_modals = sorted(set(list(by_modal_total.keys()) + list(vds_by_modal.keys())))
     for k in all_modals:
@@ -411,9 +367,6 @@ def main():
 
     ap.add_argument("--batch_size", type=int, default=1)
     ap.add_argument("--torch_dtype", type=str, default="torch.bfloat16")
-
-    ap.add_argument("--blur_sigma", type=float, default=3.0)
-    ap.add_argument("--shuffle_grid", type=int, default=4)
 
     ap.add_argument("--resume", default=None)
 
@@ -446,8 +399,6 @@ def main():
         visdep_min_score=args.visdep_min_score,
         access=args.access,
         resume=args.resume,
-        blur_sigma=args.blur_sigma,
-        shuffle_grid=args.shuffle_grid,
     )
 
     analyze_vds_statistics(pred_jsonl=pred_jsonl, out_summary_json=summary_json)

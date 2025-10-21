@@ -10,7 +10,7 @@ from rl.roi import to_pil_list
 import open_clip
 from open_clip.factory import HF_HUB_PREFIX, _MODEL_CONFIGS
 
-_MED_CLIP_DIR = "/home/lvzeyu/.cache/huggingface/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
+_MED_CLIP_DIR = None
 _CFG_JSON = os.path.join(_MED_CLIP_DIR, "open_clip_config.json")
 _WEIGHT_BIN = os.path.join(_MED_CLIP_DIR, "open_clip_pytorch_model.bin")
 _LOCAL_NAME = "biomedclip_local"
@@ -59,11 +59,11 @@ class MedClipEmbedder(nn.Module):
             imgs = imgs.to(dtype=param_dtype)
 
         feats = self.model.encode_image(imgs)
-        return feats  # [B, D]
+        return feats
 
     @torch.no_grad()
     def encode_text(self, texts: List[str]):
         ans_texts = [_extract_answer_only(t) for t in texts]
         token_ids = self.tokenizer(ans_texts, context_length=256).to(self.device)
         feats = self.model.encode_text(token_ids)
-        return feats  # [B, D]
+        return feats

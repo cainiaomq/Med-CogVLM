@@ -66,34 +66,23 @@ Now produce JSON with exactly these keys:
 }}
 """
 
-
-# ------------------------------------------------------------
-# 正则表达式：提取选项字母（A-D）
-# ------------------------------------------------------------
-# 用于匹配答案开头的字母（A-D），后面可跟分隔符，如 ":)．-" 等；忽略大小写
 LETTER_RE = re.compile(r'^\s*([A-D])(\b|:|\)|\.|、|．|-)?', re.I)
 
-# ------------------------------------------------------------
-# 参数数据类（命令行参数收集到这里，方便传递）
-# ------------------------------------------------------------
 @dataclass
 class Args:
-    root_dir: str                          # 数据集根目录
-    access: str = "both"                   # 读取范围："open" 或 "both"（包含受限）
-    out_jsonl: str = "visdep_scores.jsonl" # 输出 JSONL 路径
-    out_merge_json: Optional[str] = None   # 可选：合并输出 JSON（image_path -> 结果映射）
-    model: str = "gpt-4o-mini"             # 调用的模型名
-    temperature: float = 0.2               # 生成温度（越低越稳定）
-    max_workers: int = 8                   # 线程池最大并发数
-    qps: float = 2.0                       # 每秒请求上限（粗略节流）
-    thresholds: tuple = (0.35, 0.70)       # 分段阈值（low/medium/high）
-    split_files: Optional[List[str]] = None# 只处理指定的数据集 JSON（文件名不含 .json）
+    root_dir: str
+    access: str = "both"
+    out_jsonl: str = "visdep_scores.jsonl"
+    out_merge_json: Optional[str] = None
+    model: str = "gpt-4o-mini"
+    temperature: float = 0.2
+    max_workers: int = 8
+    qps: float = 2.0
+    thresholds: tuple = (0.35, 0.70)
+    split_files: Optional[List[str]] = None
 
-# ------------------------------------------------------------
-# 工具函数：解析、拼装与健壮性处理
-# ------------------------------------------------------------
+
 def _norm_text(x: str) -> str:
-    """小写 + 去首尾空白 + 去掉常见标点 + 合并多空格"""
     if x is None:
         return ""
     s = x.strip().lower()
@@ -124,7 +113,6 @@ def build_options_block(item: Dict[str, Any]) -> str:
         opts = ["A. Option A", "B. Option B", "C. Option C", "D. Option D"]
     return "\n".join(opts)
 
-# 尝试安全解析 JSON 字符串；若失败，尝试截取最外层大括号再解析
 def safe_json_loads(s: str) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(s)
@@ -137,10 +125,6 @@ def safe_json_loads(s: str) -> Optional[Dict[str, Any]]:
         except Exception:
             return None
 
-# ------------------------------------------------------------
-# 评分函数（根据 GPT 返回的布尔特征与文本答题能力计算视觉依赖分）
-# ------------------------------------------------------------
-# 输入：feat（GPT 的 JSON 输出 + 后续补充字段） -> 输出：分数 [0,1]
 def visdep_score_from_features(feat: Dict[str, Any]) -> float:
     def b(x): return 1.0 if bool(x) else 0.0
     def clip01(v: float) -> float:
@@ -158,8 +142,6 @@ def visdep_score_from_features(feat: Dict[str, Any]) -> float:
     is_unknown = 1.0 if ans in ("", "unknown", "n/a", "na", "none") else 0.0
     correct = clip01(float(feat.get("text_only_correct", 0.0)))
 
-    # ---------- 视觉需求 ----------
-    # 权重总和≈1，突出“空间/征象”，比较/标注次之，“仅提到图像”为轻信号
     v_base = (
         0.34 * needs_spatial +
         0.25 * needs_visual_sign +
@@ -169,16 +151,14 @@ def visdep_score_from_features(feat: Dict[str, Any]) -> float:
     )
     v_need = v_base * (0.7 if is_knowledge_question else 1.0)
 
-    # ---------- 文本可答性（连续化 reducibility ∈ [0,1]）----------
     reduc_if_correct = correct * (0.5 + 0.5 * conf)
-    reduc_if_wrong_small = (1.0 - correct) * (1.0 - is_unknown) * (0.2 * conf)  # 0~0.2
+    reduc_if_wrong_small = (1.0 - correct) * (1.0 - is_unknown) * (0.2 * conf)
     reducibility = clip01(reduc_if_correct + reduc_if_wrong_small)
 
     text_term = 1.0 - reducibility
     if is_knowledge_question:
         text_term *= 0.5
 
-    # ---------- 综合得分 ----------
     score = 0.60 * v_need + 0.40 * text_term
     return clip01(score)
 
@@ -187,9 +167,6 @@ def score_to_tag(score: float, t_low: float, t_high: float) -> str:
     if score < t_high: return "medium"
     return "high"
 
-# ------------------------------------------------------------
-# GPT 调用：带重试、固定 response_format 要求 JSON
-# ------------------------------------------------------------
 @retry(wait=wait_exponential(multiplier=1, min=1, max=20), stop=stop_after_attempt(6))
 def call_gpt(model: str, system: str, user: str, temperature: float) -> Dict[str, Any]:
     resp = client.chat.completions.create(
@@ -205,9 +182,6 @@ def call_gpt(model: str, system: str, user: str, temperature: float) -> Dict[str
     obj = safe_json_loads(content) or {}
     return obj
 
-# ------------------------------------------------------------
-# 处理单条样本：构造 prompt -> 调用 GPT -> 计算是否答对 -> 打分与打标签
-# ------------------------------------------------------------
 def annotate_one(item: Dict[str, Any], args: Args) -> Optional[Dict[str, Any]]:
     q = item.get("question") or ""
     options_block = build_options_block(item)
@@ -231,9 +205,6 @@ def annotate_one(item: Dict[str, Any], args: Args) -> Optional[Dict[str, Any]]:
     }
     return rec
 
-# ------------------------------------------------------------
-# 遍历数据集：按 access 选择 Open-access / Restricted-access 下的 JSON 文件
-# ------------------------------------------------------------
 def iter_items(root_dir: str, access: str, split_files: Optional[List[str]]):
     qa_base = os.path.join(root_dir, "QA_information")
     dirs = []
@@ -280,12 +251,9 @@ def load_done_set(out_jsonl: str) -> set:
                 done.add(p)
     return done
 
-# ------------------------------------------------------------
-# 主入口：解析参数 -> 收集样本 -> 并发标注 -> 增量写结果
-# ------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser("Annotate OmniMedVQA visual dependency by GPT (text-only)")
-    ap.add_argument("--root_dir", type=str, default="./")
+    ap.add_argument("--root_dir", type=str, default=None)
     ap.add_argument("--access", type=str, default="open", choices=["open", "both"])
     ap.add_argument("--out_jsonl", type=str, default="visdep_scores.jsonl")
     ap.add_argument("--out_merge_json", type=str, default=None)
@@ -297,8 +265,8 @@ def main():
     ap.add_argument("--threshold_low", type=float, default=0.35)
     ap.add_argument("--threshold_high", type=float, default=0.70)
     ap.add_argument("--split_files", type=str, default=None, help="comma-separated dataset names (no .json)")
-    ap.add_argument("--preview_every", type=int, default=500, help="每处理多少条打印一次预览")
-    ap.add_argument("--show_k", type=int, default=5, help="预览时展示的样本条数")
+    ap.add_argument("--preview_every", type=int, default=500)
+    ap.add_argument("--show_k", type=int, default=5)
     args_ns = ap.parse_args()
 
     args = Args(

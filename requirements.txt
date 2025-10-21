@@ -17,3 +17,5 @@ pydantic>=2.7.1
 einops
 sse-starlette>=2.1.0
 bitsandbytes>=0.43.1 # for int4 quantization
+datasets
+open_clip_torch

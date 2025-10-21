@@ -20,17 +20,17 @@
 
 ---
 
-## 🌟 Highlights
+## 🌟 Key Contributions
 
-✅ **State-of-the-art Performance**: Achieves 84.85% overall accuracy on OmniMedVQA benchmark  
-✅ **Multi-modal Support**: CT, MRI, X-ray, Ultrasound, Dermoscopy, Fundus, OCT, Microscopy  
-✅ **Clinical Task Coverage**: Anatomy Recognition, Disease Diagnosis, Lesion Grading, Modality Identification, Attribute Analysis  
-✅ **Enhanced Visual Grounding**: 30% improvement in Visual Dependency Score (VDS) through VDRF  
-✅ **Production-Ready**: Complete training pipeline with DeepSpeed optimization  
+1. **Visual Dependency Reward Framework (VDRF)**: A complementary reward mechanism combining visual-text consistency (VEC) and counterfactual dependency (DEP) rewards to ensure reasoning grounded in medical images.
+
+2. **Architectural Necessity Proof**: Comprehensive experiments showing that VDRF is effective only with deep fusion architectures (CogVLM2: ΔAcc +3.77%, ΔVDS +0.084) while shallow fusion shows negligible improvement (Qwen2.5-VL: ΔAcc +0.06%, ΔVDS -0.001).
+
+3. **SOTA Performance**: 84.85% accuracy on OmniMedVQA across 8 medical imaging modalities and 5 clinical tasks.
 
 ---
 
-## 🏗️ Architecture
+## �️ Architecture
 
 Med-CogVLM employs a three-stage training paradigm:
 
@@ -65,6 +65,10 @@ Med-CogVLM employs a three-stage training paradigm:
 git clone https://github.com/cainiaomq/Med-CogVLM.git
 cd Med-CogVLM
 
+# Create virtual environment
+conda create -n medcogvlm python=3.10
+conda activate medcogvlm
+
 # Install dependencies
 pip install -r requirements.txt
 ```
@@ -77,6 +81,30 @@ pip install -r requirements.txt
 | GRPO | A100 80GB | ~75GB | ZeRO-2 |
 
 > ⚠️ **Note**: ZeRO-3 is not currently supported
+
+---
+
+## 📁 Project Structure
+
+```
+Med-CogVLM/
+├── dataset/              # HVD Data processing scripts
+│   ├── annotate_visdep_omnimedvqa.py
+│   └── dep_checking.py
+├── rl/                   # Reinforcement learning modules
+│   ├── rewards.py        # VDRF implementation
+│   ├── embedder.py       # BiomedCLIP integration
+│   └── utils.py
+├── utils/                # Dataset loaders
+│   ├── omnimedqkv.py
+│   ├── roco.py
+│   └── slake.py
+├── lora_finetune.py      # SFT training script
+├── lora_grpo.py          # GRPO+VDRF training
+├── eval.py               # Evaluation pipeline
+├── web_demo.py           # Interactive demo
+└── requirements.txt      # Dependencies
+```
 
 ---
 
@@ -145,27 +173,23 @@ python eval.py \
 
 ### Performance by Modality
 
-| Modality | Accuracy (%) |
-|----------|--------------|
-| CT | 83.29 |
-| MRI | 86.17 |
-| X-ray | 87.19 |
-| Ultrasound | 92.61 |
-| Dermoscopy | 76.77 |
-| Fundus | 83.74 |
-| OCT | 85.87 |
-| Microscopy | 73.96 |
-| **Overall** | **84.85** |
+| Metric | CT | MRI | X-ray | Ultrasound | Dermoscopy | Fundus | OCT | Microscopy | **Overall** |
+|--------|----|----|-------|------------|------------|--------|-----|------------|-------------|
+| **Accuracy (%)** | 83.29 | 86.17 | 87.19 | 92.61 | 76.77 | 83.74 | 85.87 | 73.96 | **84.85** |
 
 ### Performance by Clinical Task
 
-| Task Type | Accuracy (%) |
-|-----------|--------------|
-| Anatomy Recognition | 88.32 |
-| Disease Diagnosis | 82.47 |
-| Lesion Grading | 79.15 |
-| Modality Identification | 93.68 |
-| Attribute Analysis | 85.91 |
+| Metric | Anatomy Recognition | Disease Diagnosis | Lesion Grading | Modality Identification | Attribute Analysis |
+|--------|-------------------|------------------|----------------|------------------------|-------------------|
+| **Accuracy (%)** | 88.32 | 82.47 | 79.15 | 93.68 | 85.91 |
+
+### Architecture Impact on VDRF Effectiveness
+
+| Architecture | Model | Base Acc | +VDRF Acc | ΔVDS |
+|-------------|-------|----------|-----------|------|
+| Shallow | Qwen2.5-VL | 45.36% | 45.42% | -0.001 |
+| Shallow | Lingshu | 77.29% | 77.35% | +0.006 |
+| **Deep** | **CogVLM2** | **79.04%** | **82.81%** | **+0.084** |
 
 ---
 

@@ -288,7 +288,7 @@ def main():
                 eval_loss += loss.detach().float()
 
         eval_loss = accelerator.gather(eval_loss)
-        avg_eval_loss = eval_loss.mean().item() / len(eval_dataloader) # 平均 loss
+        avg_eval_loss = eval_loss.mean().item() / len(eval_dataloader)
         writer.add_scalar('Eval/Perplexity', torch.exp(torch.tensor(avg_eval_loss)), epoch)
         writer.add_scalar('Eval/Epoch_Loss', avg_eval_loss, epoch)
 
