@@ -5,7 +5,7 @@ tensorboard>=2.16.2
 xformers
 torch>=2.0.0
 torchvision
-transformers>=4.40
+transformers>=4.40,<4.54
 huggingface-hub>=0.23.0
 pillow
 chainlit>=1.0
