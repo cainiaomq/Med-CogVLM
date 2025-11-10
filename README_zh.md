@@ -1,6 +1,6 @@
 <div align="center">
 
-# Med-CogVLM: 基于视觉依赖强化学习的医学多模态模型
+# Med-CogVLM: 一个基于视觉依赖强化学习的医学多模态模型
 
 [![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/greedno/Med-CogVLM)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
@@ -181,7 +181,7 @@ python eval.py \
 
 | 指标 | 解剖识别 | 疾病诊断 | 病灶分级 | 模态识别 | 属性分析 |
 |------|---------|---------|---------|---------|---------|
-| **准确率 (%)** | 88.32 | 82.47 | 79.15 | 93.68 | 85.91 |
+| **准确率 (%)** | 85.46 | 82.33 | 78.32 | 98.00 | 81.18 |
 
 ### 架构对VDRF有效性的影响
 

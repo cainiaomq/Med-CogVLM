@@ -1,6 +1,6 @@
 <div align="center">
 
-# Med-CogVLM: Medical Vision-Language Model with Visual Dependency Reinforcement Learning
+# Med-CogVLM: A Medical Vision-Language Model with Visual Dependency Reinforcement Learning
 
 [![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/greedno/Med-CogVLM)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
@@ -181,7 +181,7 @@ python eval.py \
 
 | Metric | Anatomy Recognition | Disease Diagnosis | Lesion Grading | Modality Identification | Attribute Analysis |
 |--------|-------------------|------------------|----------------|------------------------|-------------------|
-| **Accuracy (%)** | 88.32 | 82.47 | 79.15 | 93.68 | 85.91 |
+| **Accuracy (%)** | 85.46 | 82.33 | 78.32 | 98.00 | 81.18 |
 
 ### Architecture Impact on VDRF Effectiveness
 
