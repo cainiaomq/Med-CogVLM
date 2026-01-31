@@ -24,9 +24,9 @@
 
 1. **Visual Dependency Reward Framework (VDRF)**: A complementary reward mechanism combining visual-text consistency (VEC) and counterfactual dependency (DEP) rewards to ensure reasoning grounded in medical images.
 
-2. **Architectural Necessity Proof**: Comprehensive experiments showing that VDRF is effective only with deep fusion architectures (CogVLM2: ΔAcc +3.77%, ΔVDS +0.084) while shallow fusion shows negligible improvement (Qwen2.5-VL: ΔAcc +0.06%, ΔVDS -0.001).
+2. **Architectural Necessity Proof**: Comprehensive experiments showing that VDRF is effective only with deep fusion architectures (CogVLM2: ΔAcc +13.00%, ΔVDS +0.082) while shallow fusion shows negligible improvement (Qwen2.5-VL: ΔAcc +0.06%, ΔVDS -0.001).
 
-3. **SOTA Performance**: 84.85% accuracy on OmniMedVQA across 8 medical imaging modalities and 5 clinical tasks.
+3. **SOTA Performance**: 85.98% accuracy on OmniMedVQA across 8 medical imaging modalities and 5 clinical tasks.
 
 ---
 
