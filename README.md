@@ -40,6 +40,7 @@ Med-CogVLM employs a three-stage training paradigm:
 - **ROCOv2**: Enhance medical terminology understanding (60K samples)
 - **SLAKE**: Learn structured QA patterns (14K samples)
 - **OmniMedVQA**: Integrate multi-modal clinical tasks (89K samples)
+- **CogCoM-TDIUC**: General reasoning data for enhancing reasoning strategy exploration during VDRF
 
 ### Stage 2: High Visual Dependency (HVD) Data Sampling
 
@@ -132,6 +133,7 @@ Download required datasets:
 | ROCOv2 | 60K | High-quality radiology data | [HuggingFace](https://huggingface.co/datasets/eltorio/ROCOv2-radiology) |
 | SLAKE | 14K | Structured medical VQA | [HuggingFace](https://huggingface.co/datasets/BoKelvin/SLAKE) |
 | OmniMedVQA | 89K | Multi-modal benchmark | [HuggingFace](https://huggingface.co/datasets/foreverbeliever/OmniMedVQA) |
+| CogCoM-TDIUC | 37K | reasoning | [HuggingFace](https://huggingface.co/qijimrc/CogCoM) |
 
 **Visual Encoder:**
 - [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224): For computing VEC and DEP rewards
@@ -171,40 +173,24 @@ python eval.py \
     --resume ./your_out_dir/vds_predictions.jsonl
 ```
 
-### Performance by Modality
+### Performance by Modality (OmniMedVQA)
 
 | Metric | CT | MRI | X-ray | Ultrasound | Dermoscopy | Fundus | OCT | Microscopy | **Overall** |
 |--------|----|----|-------|------------|------------|--------|-----|------------|-------------|
-| **Accuracy (%)** | 83.29 | 86.17 | 87.19 | 92.61 | 76.77 | 83.74 | 85.87 | 73.96 | **84.85** |
+| **Accuracy (%)** | 82.3 | 86.9 | 88.9 | 98.7 | 77.9 | 85.3 | 86.0 | 73.7 | **85.98** |
 
-### Performance by Clinical Task
+### Performance by Clinical Task (OmniMedVQA)
 
 | Metric | Anatomy Recognition | Disease Diagnosis | Lesion Grading | Modality Identification | Attribute Analysis |
 |--------|-------------------|------------------|----------------|------------------------|-------------------|
-| **Accuracy (%)** | 85.46 | 82.33 | 78.32 | 98.00 | 81.18 |
+| **Accuracy (%)** | 86.5 | 83.4 | 79.1 | 98.1 | 81.9 |
 
 ### Architecture Impact on VDRF Effectiveness
 
 | Architecture | Model | Base Acc | +VDRF Acc | ΔVDS |
 |-------------|-------|----------|-----------|------|
-| Shallow | Qwen2.5-VL | 45.36% | 45.42% | -0.001 |
-| Shallow | Lingshu | 77.29% | 77.35% | +0.006 |
-| **Deep** | **CogVLM2** | **79.04%** | **82.81%** | **+0.084** |
-
----
-
-## 📝 Citation
-
-If you find Med-CogVLM helpful in your research, please cite:
-
-```bibtex
-@article{medcogvlm2025,
-  title={Med-CogVLM: Vision-Dependent Reinforcement Learning for Medical Multimodal Understanding},
-  author={},
-  journal={arXiv preprint arXiv:},
-  year={2025}
-}
-```
+| Shallow | Qwen2.5-VL-SFT | 45.36% | 45.42% | -0.001 |
+| **Deep** | **CogVLM2-SFT** | **74.66%** | **87.66%** | **+0.082** |
 
 ---
 

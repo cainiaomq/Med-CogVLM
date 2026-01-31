@@ -27,6 +27,7 @@ from utils.roco import ROCO_Dataset
 from utils.roco2 import ROCOv2_Dataset
 from utils.slake import SLAKE_Dataset
 from utils.omnimedqkv import OmniMedVQA_Dataset
+from utils.cogcom import CogCoM_Dataset
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -152,6 +153,16 @@ def main():
                 input_length=args.max_input_len,
                 output_length=args.max_output_len
             )
+    elif args.dataset_name.lower() == "CoMDataset":
+        dataset = CogCoM_Dataset(
+                root_dir=args.dataset_path,
+                tokenizer=tokenizer,
+                model=model,
+                torch_type=args.torch_type,
+                input_length=args.max_input_len,
+                output_length=args.max_output_len,
+                use_com_reasoning=True
+        )
     else:
         dataset = ConversationDataset(
                 root_dir=args.dataset_path,
