@@ -2,75 +2,74 @@
 
 # Med-CogVLM: A Medical Vision-Language Model with Visual Dependency Reinforcement Learning
 
-[![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Model-blue)](https://huggingface.co/greedno/Med-CogVLM)
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
-
-[English](./README.md) | [中文](./README_zh.md)
 
 </div>
 
 ---
 
-## 📖 Overview
+## Overview
 
-**Med-CogVLM** is an advanced medical vision-language model built upon CogVLM2's deep fusion architecture. We systematically address two fundamental challenges in medical VLMs through our innovative **Visual Dependency Reward Framework (VDRF)**:
-
-- 🔍 **Deep Fusion Architecture**: Leverages CogVLM2's visual expert mechanism for dense vision-language interactions across all Transformer layers
-- 🎯 **Visual Dependency Reinforcement Learning**: Ensures the model's reasoning is genuinely grounded in medical images rather than language priors
+**Med-CogVLM** is a 19B-parameter medical vision-language model built upon CogVLM2's deep fusion architecture. We address two fundamental challenges in medical VLMs: insufficient visual-language interaction from shallow fusion designs, and over-reliance on language priors rather than image evidence. Our key contribution is the **Visual Dependency Reward Framework (VDRF)**, which uses visual-text consistency (VEC) and counterfactual dependency (DEP) rewards under GRPO to ensure model reasoning is genuinely grounded in medical images.
 
 ---
 
-## 🌟 Key Contributions
+## Key Contributions
 
-1. **Visual Dependency Reward Framework (VDRF)**: A complementary reward mechanism combining visual-text consistency (VEC) and counterfactual dependency (DEP) rewards to ensure reasoning grounded in medical images.
+1. **Visual Dependency Reward Framework (VDRF)**: A complementary reward mechanism combining VEC and DEP rewards to optimize cross-modality information flow, transforming visual experts from passive feature extractors to active reasoning guides.
 
-2. **Architectural Necessity Proof**: Comprehensive experiments showing that VDRF is effective only with deep fusion architectures (CogVLM2: ΔAcc +13.00%, ΔVDS +0.082) while shallow fusion shows negligible improvement (Qwen2.5-VL: ΔAcc +0.06%, ΔVDS -0.001).
+2. **Architecture as Enabling Factor**: Convergent evidence from two independent shallow fusion models shows VDRF is architecture-dependent — shallow fusion gains negligibly (Qwen2.5-VL: ΔAcc +0.46%; Lingshu-7B: ΔAcc +0.16%), while deep fusion CogVLM2 achieves ΔAcc **+13.94 pp** on the high visual dependency evaluation subset.
 
-3. **SOTA Performance**: 85.98% accuracy on OmniMedVQA across 8 medical imaging modalities and 5 clinical tasks.
+3. **SOTA on OmniMedVQA**: **84.8%** accuracy across 8 medical imaging modalities and 5 clinical tasks, surpassing Lingshu-7B by 3.9 pp despite using far fewer training samples.
 
 ---
 
-## �️ Architecture
+## Architecture
 
-Med-CogVLM employs a three-stage training paradigm:
+Med-CogVLM (19B) comprises:
+- **Visual Encoder**: EVA-CLIP-E (3B)
+- **Language Backbone**: Meta-Llama-3-8B-Instruct
+- **Visual Experts**: CogVLM2-style 8B expert modules at every Transformer layer
+- **Adapters**: Lightweight Conv + SwiGLU adapters
+
+Training follows a three-stage paradigm:
 
 ### Stage 1: Progressive Supervised Fine-Tuning (SFT)
 
-- **ROCO**: Establish medical vision-language alignment foundation (80K samples)
-- **ROCOv2**: Enhance medical terminology understanding (60K samples)
-- **SLAKE**: Learn structured QA patterns (14K samples)
-- **OmniMedVQA**: Integrate multi-modal clinical tasks (89K samples)
-- **CogCoM-TDIUC**: General reasoning data for enhancing reasoning strategy exploration during VDRF
+| Dataset | Samples | Purpose |
+|---------|---------|---------|
+| ROCO | 16K | Radiology image-text alignment |
+| ROCOv2 | 30K | Medical terminology |
+| SLAKE | 14K | Structured medical VQA |
+| OmniMedVQA-train | 60K | Multi-modal clinical tasks |
+| CogCoM-TDIUC | 37K | Chain-of-thought reasoning |
 
 ### Stage 2: High Visual Dependency (HVD) Data Sampling
 
 1. **GPT-4o-mini Scoring**: Automated visual dependency assessment
 2. **Counterfactual Filtering**: Hard negative mining based on DEP scores
-3. **Weighted Sampling**: Prioritize high-dependency samples during training
+3. **Weighted Sampling**: Prioritize high-dependency samples during GRPO
 
 ### Stage 3: GRPO + VDRF Reinforcement Learning
 
-**Reward Components:**
-- ✓ Base Reward: Accuracy + Format compliance
-- ✓ Visual Consistency Reward (VEC): Global + Local similarity
-- ✓ Counterfactual Dependency Reward (DEP): Real image grounding
+**Reward Components (weights):**
+- Base Reward (0.5): Accuracy + Format compliance
+- Visual Consistency Reward VEC (0.4): Global + Local image-text similarity via BiomedCLIP
+- Counterfactual Dependency Reward DEP (0.2): Anti-gaming constraint ensuring real image grounding
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/cainiaomq/Med-CogVLM.git
+git clone <anonymous>
 cd Med-CogVLM
 
-# Create virtual environment
 conda create -n medcogvlm python=3.10
 conda activate medcogvlm
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -78,18 +77,18 @@ pip install -r requirements.txt
 
 | Stage | GPU | Memory | DeepSpeed |
 |-------|-----|--------|-----------|
-| SFT | A100 80GB | ~75GB | ZeRO-2 |
-| GRPO | A100 80GB | ~75GB | ZeRO-2 |
+| SFT | A800 80GB | ~75GB | ZeRO-2 |
+| GRPO | A800 80GB | ~75GB | ZeRO-2 |
 
-> ⚠️ **Note**: ZeRO-3 is not currently supported
+> **Note**: ZeRO-3 is not currently supported. GRPO training: 2000 steps, group size K=4, AdamW lr=1e-6.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Med-CogVLM/
-├── dataset/              # HVD Data processing scripts
+├── dataset/              # HVD data processing scripts
 │   ├── annotate_visdep_omnimedvqa.py
 │   └── dep_checking.py
 ├── rl/                   # Reinforcement learning modules
@@ -109,11 +108,9 @@ Med-CogVLM/
 
 ---
 
-## 💻 Usage
+## Usage
 
-### Web-based Model Inference
-
-Run this code to start chatting in WebUI.
+### Web Demo
 
 ```shell
 chainlit run web_demo.py
@@ -121,27 +118,25 @@ chainlit run web_demo.py
 
 ---
 
-## 📊 Training
+## Training
 
 ### 1. Data Preparation
 
 Download required datasets:
 
-| Dataset | Size | Purpose | Link |
-|---------|------|---------|------|
-| ROCO | 80K | Radiology image-text pairs | [GitHub](https://github.com/razorx89/roco-dataset) |
-| ROCOv2 | 60K | High-quality radiology data | [HuggingFace](https://huggingface.co/datasets/eltorio/ROCOv2-radiology) |
-| SLAKE | 14K | Structured medical VQA | [HuggingFace](https://huggingface.co/datasets/BoKelvin/SLAKE) |
-| OmniMedVQA | 89K | Multi-modal benchmark | [HuggingFace](https://huggingface.co/datasets/foreverbeliever/OmniMedVQA) |
-| CogCoM-TDIUC | 37K | reasoning | [HuggingFace](https://huggingface.co/qijimrc/CogCoM) |
+| Dataset | Link |
+|---------|------|
+| ROCO | [GitHub](https://github.com/razorx89/roco-dataset) |
+| ROCOv2 | [PhysioNet](https://physionet.org/content/roco/1.0/) |
+| SLAKE | [Official](https://www.med-vqa.com/slake/) |
+| OmniMedVQA | [GitHub](https://github.com/OpenGVLab/OmniMedVQA) |
+| CogCoM-TDIUC | [GitHub](https://github.com/THUDM/CogCoM) |
 
-**Visual Encoder:**
-- [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224): For computing VEC and DEP rewards
+**Visual Encoder for VDRF rewards**: BiomedCLIP (microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224)
 
 ### 2. Progressive SFT Fine-tuning
 
 ```bash
-# Stage 1: ROCO
 deepspeed lora_finetune.py \
     --model_path ./your_model_path \
     --dataset_path ./your_dataset_path \
@@ -161,7 +156,7 @@ deepspeed grpo_vdrf.py \
 
 ---
 
-## 📈 Evaluation
+## Evaluation
 
 ### Run Evaluation
 
@@ -173,62 +168,72 @@ python eval.py \
     --resume ./your_out_dir/vds_predictions.jsonl
 ```
 
-### Performance by Modality (OmniMedVQA)
+> OmniMedVQA results are reported on a clean test set (n=23,776, 89.05% of original) with image-level leakage removed.
 
-| Metric | CT | MRI | X-ray | Ultrasound | Dermoscopy | Fundus | OCT | Microscopy | **Overall** |
-|--------|----|----|-------|------------|------------|--------|-----|------------|-------------|
-| **Accuracy (%)** | 82.3 | 86.9 | 88.9 | 98.7 | 77.9 | 85.3 | 86.0 | 73.7 | **85.98** |
+### Cross-Modality Performance on OmniMedVQA (Accuracy %)
 
-### Performance by Clinical Task (OmniMedVQA)
+| Model | CT | MRI | X-ray | Ultra | Derm | Fundus | OCT | Micro | **Avg** |
+|-------|----|----|-------|-------|------|--------|-----|-------|---------|
+| CogVLM2-19B | 46.6 | 48.6 | 64.7 | 40.7 | 54.8 | 51.5 | 57.9 | 62.2 | 50.1 |
+| Qwen2.5-VL-7B | 57.9 | 67.0 | 73.8 | 39.7 | 67.8 | 69.9 | 63.3 | 68.6 | 62.4 |
+| Qwen2.5-VL-32B | 70.5 | 73.9 | 78.0 | 40.4 | 68.7 | 80.9 | 74.0 | 66.3 | 68.8 |
+| LLaVA-Med-7B | 18.9 | 20.2 | 24.1 | 25.9 | 30.7 | 27.2 | 18.9 | 26.1 | 24.0 |
+| MedVLM-R1-2B | 62.4 | 85.9 | 65.7 | 51.0 | 57.9 | 54.9 | 56.1 | 58.7 | 69.0 |
+| MedGemma-4B-IT | 76.8 | 61.8 | 77.5 | 54.6 | 73.5 | 80.8 | 73.1 | 66.6 | 67.4 |
+| InternVL2.5-14B | 71.3 | 76.1 | 84.6 | 81.6 | 79.6 | 85.8 | 79.1 | 82.9 | 78.0 |
+| Lingshu-7B | 73.7 | 80.6 | 82.8 | 81.2 | **83.9** | **87.7** | **87.9** | **84.1** | 80.9 |
+| **Med-CogVLM-19B** | **82.8** | **86.4** | **88.9** | **95.2** | 75.7 | 83.7 | 86.3 | 68.0 | **84.8** |
 
-| Metric | Anatomy Recognition | Disease Diagnosis | Lesion Grading | Modality Identification | Attribute Analysis |
-|--------|-------------------|------------------|----------------|------------------------|-------------------|
-| **Accuracy (%)** | 86.5 | 83.4 | 79.1 | 98.1 | 81.9 |
+### Cross-Task and Multi-Benchmark Performance (Accuracy %)
 
-### Architecture Impact on VDRF Effectiveness
+| Model | Anat. | Dis. | Grad. | Mod. | Attr. | OmniMed Avg | PMC-VQA | MedXpertQA | **Overall** |
+|-------|-------|------|-------|------|-------|-------------|---------|------------|-------------|
+| CogVLM2-19B | 42.9 | 43.8 | 31.1 | 96.9 | 63.6 | 50.1 | 42.7 | 19.5 | 37.4 |
+| Qwen2.5-VL-7B | 43.6 | 61.1 | 59.8 | 98.1 | 69.7 | 62.4 | 51.9 | 22.3 | 45.5 |
+| Lingshu-7B | 79.8 | 77.7 | **87.6** | **99.4** | 78.4 | 80.9 | **56.3** | 26.7 | 54.6 |
+| **Med-CogVLM-19B** | **86.6** | **82.0** | 84.1 | 97.5 | **85.4** | **84.8** | 53.7 | **29.5** | **56.0** |
 
-| Architecture | Model | Base Acc | +VDRF Acc | ΔVDS |
-|-------------|-------|----------|-----------|------|
-| Shallow | Qwen2.5-VL-SFT | 45.36% | 45.42% | -0.001 |
-| **Deep** | **CogVLM2-SFT** | **74.66%** | **87.66%** | **+0.082** |
+### Architecture Impact on VDRF Effectiveness (HVD subset, n=4,339)
+
+| Fusion | Model | Acc (%) | ΔAcc | BMCA-VDS | PLIP-VDS | UniMed-VDS |
+|--------|-------|---------|------|----------|----------|------------|
+| Shallow | Qwen2.5-VL-7B-SFT | 42.52 | -- | 0.2146 | 0.2526 | 0.2371 |
+| Shallow | +VDRF | 42.98 | +0.46 | 0.2148 | 0.2525 | 0.2371 |
+| Shallow | Lingshu-7B | 77.78 | -- | 0.2230 | 0.2536 | 0.2750 |
+| Shallow | +VDRF | 77.94 | +0.16 | 0.2253 | 0.2549 | 0.2809 |
+| **Deep** | CogVLM2-SFT | 75.71 | -- | 0.2013 | 0.2374 | 0.2160 |
+| **Deep** | **+VDRF (Ours)** | **89.65** | **+13.94** | **0.2261** | **0.2637** | **0.3489** |
+
+### Ablation: Reward Components (HVD subset, n=4,339)
+
+| Configuration | Acc (%) | BMCA-VDS | PLIP-VDS | UniMed-VDS |
+|---------------|---------|----------|----------|------------|
+| CogVLM2-SFT | 75.71 | 0.2013 | 0.2374 | 0.2160 |
+| Only R_acc | 86.89 | 0.2206 | 0.2596 | 0.3126 |
+| w/o R_DEP | 86.93 | 0.2247 | 0.2630 | 0.3492 |
+| w/o R_VEC | 88.02 | 0.2210 | 0.2451 | 0.2445 |
+| **Full VDRF** | **89.65** | **0.2261** | **0.2637** | **0.3489** |
 
 ---
 
-## 🤝 Contributing
+## Citation
 
-We welcome contributions of all kinds! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-### Ways to Contribute
-- 🐛 Report bugs and issues
-- 💡 Propose new features
-- 📝 Improve documentation
-- 🔧 Submit pull requests
+```bibtex
+@article{medcogvlm2025,
+  title={Med-CogVLM: A Medical Vision-Language Model with Visual Dependency Reinforcement Learning},
+  author={Anonymous},
+  year={2025}
+}
+```
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
-## 📧 Contact
-
-- **Project Homepage**: https://github.com/cainiaomq/Med-CogVLM
-- **Model Hub**: https://huggingface.co/greedno/Med-CogVLM
-- **Issue Tracker**: [GitHub Issues](https://github.com/cainiaomq/Med-CogVLM/issues)
-
----
-
-## 🙏 Acknowledgments
-
-Special thanks to:
-- CogVLM team for the foundational architecture
-- OmniMedVQA dataset contributors
-- Medical imaging communities for data support
-
----
-
-## ⚠️ Disclaimer
+## Disclaimer
 
 **Med-CogVLM is intended for research purposes only.** This model should not be used as the sole basis for clinical diagnosis. Always consult qualified healthcare professionals for medical decisions.
