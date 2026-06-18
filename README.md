@@ -132,7 +132,7 @@ Download required datasets:
 | OmniMedVQA | [GitHub](https://github.com/OpenGVLab/OmniMedVQA) |
 | CogCoM-TDIUC | [GitHub](https://github.com/THUDM/CogCoM) |
 
-**Visual Encoder for VDRF rewards**: BiomedCLIP (microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224)
+**Visual Encoder for VDRF rewards**: BiomedCLIP
 
 ### 2. Progressive SFT Fine-tuning
 
