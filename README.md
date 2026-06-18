@@ -206,18 +206,6 @@ python eval.py \
 
 ---
 
-## Citation
-
-```bibtex
-@article{medcogvlm2025,
-  title={Med-CogVLM: A Medical Vision-Language Model with Visual Dependency Reinforcement Learning},
-  author={Anonymous},
-  year={2025}
-}
-```
-
----
-
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
