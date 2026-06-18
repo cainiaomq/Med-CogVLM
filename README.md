@@ -108,16 +108,6 @@ Med-CogVLM/
 
 ---
 
-## Usage
-
-### Web Demo
-
-```shell
-chainlit run web_demo.py
-```
-
----
-
 ## Training
 
 ### 1. Data Preparation
@@ -232,8 +222,3 @@ python eval.py \
 
 This project is licensed under the [Apache License 2.0](LICENSE).
 
----
-
-## Disclaimer
-
-**Med-CogVLM is intended for research purposes only.** This model should not be used as the sole basis for clinical diagnosis. Always consult qualified healthcare professionals for medical decisions.
