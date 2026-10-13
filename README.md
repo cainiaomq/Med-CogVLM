@@ -8,6 +8,13 @@
 
 ---
 
+## News
+
+- **Med-CogVLM has been accepted to PRICAI 2026** (Pacific Rim International Conference on Artificial Intelligence, Guangzhou, China, November 2026).
+- Follow-up work: [NAP](https://github.com/cainiaomq/NAP) (Noise-Aware Perception) supervises the visual pathway of Med-CogVLM's deep-fusion backbone directly through noise-level prediction.
+
+---
+
 ## Overview
 
 **Med-CogVLM** is a 19B-parameter medical vision-language model built upon CogVLM2's deep fusion architecture. We address two fundamental challenges in medical VLMs: insufficient visual-language interaction from shallow fusion designs, and over-reliance on language priors rather than image evidence. Our key contribution is the **Visual Dependency Reward Framework (VDRF)**, which uses visual-text consistency (VEC) and counterfactual dependency (DEP) rewards under GRPO to ensure model reasoning is genuinely grounded in medical images.
@@ -64,7 +71,7 @@ Training follows a three-stage paradigm:
 ### Installation
 
 ```bash
-git clone <anonymous>
+git clone https://github.com/cainiaomq/Med-CogVLM.git
 cd Med-CogVLM
 
 conda create -n medcogvlm python=3.10
@@ -137,7 +144,7 @@ deepspeed lora_finetune.py \
 ### 3. GRPO with VDRF Training
 
 ```bash
-deepspeed grpo_vdrf.py \
+deepspeed lora_grpo.py \
     --model_path ./your_model_path \
     --dataset_path ./your_dataset_path \
     --save_path ./your_save_path \
@@ -203,6 +210,22 @@ python eval.py \
 | w/o R_DEP | 86.93 | 0.2247 | 0.2630 | 0.3492 |
 | w/o R_VEC | 88.02 | 0.2210 | 0.2451 | 0.2445 |
 | **Full VDRF** | **89.65** | **0.2261** | **0.2637** | **0.3489** |
+
+---
+
+## Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@inproceedings{lv2026medcogvlm,
+  title     = {Med-CogVLM: A Medical Vision-Language Model with Visual Dependency Reinforcement Learning},
+  author    = {Lv, Zeyu and Zhang, Peng and Zhao, Qianwen and Dong, Hongxin and Qin, Pinle and Xie, Fengbo},
+  booktitle = {Pacific Rim International Conference on Artificial Intelligence (PRICAI)},
+  year      = {2026},
+  note      = {To appear}
+}
+```
 
 ---
 
